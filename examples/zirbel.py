@@ -152,7 +152,17 @@ for a in range(len(bj.Action)):
 
 prob_s_a_r_s[bj.Player._END, bj.Dealer._END, :, 1, bj.Player._END, bj.Dealer._END] = prob_p_a_p[bj.Player._END, :, bj.Player._END]
 
+assert np.isclose(prob_s_a_r_s[..., -len(bj.Terminal):, :-len(bj.Terminal)], 0.).all()
+assert np.isclose(prob_s_a_r_s[..., :-len(bj.Terminal), -len(bj.Terminal):], 0.).all()
+
 prob_s_a_r_s[bj.Player._END, :-len(bj.Terminal), :, 1, bj.Player._END, bj.Dealer._END] = 1.
 prob_s_a_r_s[:-len(bj.Terminal), bj.Dealer._END, :, 1, bj.Player._END, bj.Dealer._END] = 1.
 
-assert np.isclose(prob_s_a_r_s.sum(axis=(3,4,5)), 1.).all()
+assert np.isclose(prob_s_a_r_s.sum(axis=(3, 4, 5)), 1.).all()
+
+prob_s_a_s = prob_s_a_r_s.sum(axis=3)
+assert np.isclose(prob_s_a_s.sum(axis=(3, 4)), 1.).all()
+
+reward_s_a = prob_s_a_r_s.sum(axis=(4, 5)) @ reward_values
+pd.DataFrame(reward_s_a[..., bj.Action.s], index=bj.player_labels, columns=bj.dealer_labels)
+pd.DataFrame(reward_s_a[..., bj.Action.h], index=bj.player_labels, columns=bj.dealer_labels)
