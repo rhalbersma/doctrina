@@ -9,8 +9,9 @@ from toposort import toposort, toposort_flatten
 
 import gym
 import gym_blackjack_v1 as bj
+import doctrina.algorithms.dp as dp
 
-env = gym.make('Blackjack-v1', winning_blackjack=1.5)
+env = gym.make('Blackjack-v1', winning_blackjack=+1.5, model_based=True)
 
 ###############################################################################
 # Dynamic programming using Markov Chains
@@ -83,25 +84,25 @@ assert np.isclose(prob_p_a_p.sum(axis=2), 1.).all()
 
 id_t = np.identity(len(bj.Player) - len(bj.Terminal))
 
-P_stand = prob_p_a_p[:, bj.Action.s, :]
-Q_stand, R_stand = P_stand[:-len(bj.Terminal), :-len(bj.Terminal)], P_stand[:-len(bj.Terminal), -len(bj.Terminal):]
-N_stand = np.linalg.inv(id_t - Q_stand)
-B_stand = N_stand @ R_stand
-pd.DataFrame(P_stand, index=bj.player_labels, columns=bj.player_labels).round(1)
-pd.DataFrame(Q_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
-pd.DataFrame(R_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
-pd.DataFrame(N_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
-pd.DataFrame(B_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
+# P_stand = prob_p_a_p[:, bj.Action.s, :]
+# Q_stand, R_stand = P_stand[:-len(bj.Terminal), :-len(bj.Terminal)], P_stand[:-len(bj.Terminal), -len(bj.Terminal):]
+# N_stand = np.linalg.inv(id_t - Q_stand)
+# B_stand = N_stand @ R_stand
+# pd.DataFrame(P_stand, index=bj.player_labels, columns=bj.player_labels).round(1)
+# pd.DataFrame(Q_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
+# pd.DataFrame(R_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
+# pd.DataFrame(N_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
+# pd.DataFrame(B_stand, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
 
-P_hit = prob_p_a_p[:, bj.Action.h, :]
-Q_hit, R_hit = P_hit[:-len(bj.Terminal), :-len(bj.Terminal)], P_hit[:-len(bj.Terminal), -len(bj.Terminal):]
-N_hit = np.linalg.inv(id_t - Q_hit)
-B_hit = N_hit @ R_hit
-pd.DataFrame(P_hit, index=bj.player_labels, columns=bj.player_labels).round(1)
-pd.DataFrame(Q_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
-pd.DataFrame(R_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
-pd.DataFrame(N_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
-pd.DataFrame(B_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
+# P_hit = prob_p_a_p[:, bj.Action.h, :]
+# Q_hit, R_hit = P_hit[:-len(bj.Terminal), :-len(bj.Terminal)], P_hit[:-len(bj.Terminal), -len(bj.Terminal):]
+# N_hit = np.linalg.inv(id_t - Q_hit)
+# B_hit = N_hit @ R_hit
+# pd.DataFrame(P_hit, index=bj.player_labels, columns=bj.player_labels).round(1)
+# pd.DataFrame(Q_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
+# pd.DataFrame(R_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
+# pd.DataFrame(N_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[:-len(bj.Terminal)]).round(2)
+# pd.DataFrame(B_hit, index=bj.player_labels[:-len(bj.Terminal)], columns=bj.player_labels[-len(bj.Terminal):]).round(2)
 
 pol_dealer = one_hot_policy(np.resize(env.dealer_policy, len(bj.Player)))
 fsm_dealer = (fsm * np.expand_dims(pol_dealer, axis=0).T).sum(axis=0)
