@@ -15,7 +15,7 @@ setup(
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[
-        'gym', 'matplotlib', 'numpy', 'pandas', 'scipy', 'seaborn', 'setuptools', 'toposort', 'tqdm', 'wheel',
+        'gym', 'matplotlib', 'numpy', 'pandas', 'pylint', 'scipy', 'seaborn', 'setuptools', 'tqdm', 'wheel',
         'gym_blackjack_v1 @ git+https://github.com/rhalbersma/gym-blackjack-v1.git#egg=gym_blackjack_v1'
     ],
     python_requires='>=3.6',

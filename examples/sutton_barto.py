@@ -9,11 +9,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from doctrina.algorithms import mc
+from doctrina.algorithms import dp, mc
 from doctrina import spaces
 import gym_blackjack_v1 as bj
 
-env = gym.make('Blackjack-v1')
+env = gym.make('Blackjack-v1', model=True)
 SEED = 47110815
 env.seed(SEED)          # reproducible environment
 
@@ -152,6 +152,12 @@ target_policy = stand_on_20
 # (this was determined by separately generating one-hundred million episodes 
 # using the target policy and averaging their returns).
 episodes = 10**6
-V, N = mc.predict_ev(env, episodes, target_policy, start)
+V, N = mc.predict_ev(env, episodes, stand_on_20, start)
 assert np.isclose(V[start], -0.27726, rtol=1e-2)
 assert N[start] == episodes
+
+target_policyM = np.zeros(spaces.shape(env.state_space), dtype=int)
+target_policyM[:len(bj.Hand), :len(bj.Card)] = target_policy
+target_policyM = target_policyM.reshape(spaces.size(env.state_space))
+V, delta, iter = dp.V_policy_eval_deter_sync(env, target_policyM, tol=1e-9)
+V.reshape(spaces.shape(env.state_space))[start]
