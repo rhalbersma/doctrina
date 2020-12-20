@@ -13,7 +13,7 @@ from doctrina.algorithms import dp, mc
 from doctrina import spaces
 import gym_blackjack_v1 as bj
 
-env = gym.make('Blackjack-v1', model=True)
+env = gym.make('Blackjack-v1')
 SEED = 47110815
 env.seed(SEED)          # reproducible environment
 
@@ -27,7 +27,7 @@ stand_on_20[bj.Hand.H20:(bj.Hand.H21 + 1), :] = bj.Action.s
 stand_on_20[bj.Hand.S20:(bj.Hand.BJ  + 1), :] = bj.Action.s
 
 # In any event, after 500,000 games the value function is very well approximated.
-runs = [ 10000, 500000 ]
+runs = [ 10_000, 500_000 ]
 V, N = zip(*[ 
     mc.predict_ev(env, episodes, stand_on_20) 
     for episodes in runs 
@@ -93,16 +93,12 @@ plt.show()
 # Example 5.3: Solving Blackjack
 ###############################################################################
 
-episodes = 10**6
+episodes = 500_000
 policy0 = stand_on_20
 policy, Q, N = mc.control_es(env, episodes, policy0)
-#policy, Q, N = mc.control_ev_eps(env, episodes, policy0)
-#policy, Q, N = mc.control_ev_ucb(env, episodes, policy0)
-
-#assert (policy == Q.argmax(axis=2)).all()
+assert (policy == Q.argmax(axis=2)).all()
 policy = Q.argmax(axis=2)
 V = Q.max(axis=2)
-A = Q[:,:,bj.Action.h] - Q[:,:,bj.Action.h]
 
 fig, axes = plt.subplots(nrows=2, ncols=2)
 fig.suptitle(
@@ -146,18 +142,20 @@ plt.show()
 start = (bj.Hand.S13, bj.Card._2)
 
 # The target policy was to stick only on a sum of 20 or 21, as in Example 5.1.
-target_policy = stand_on_20
+target_policy = stand_on_20.copy()
 
 # The value of this state under the target policy is approximately −0.27726 
 # (this was determined by separately generating one-hundred million episodes 
 # using the target policy and averaging their returns).
-episodes = 10**6
-V, N = mc.predict_ev(env, episodes, stand_on_20, start)
+episodes = 100_000_000
+V, N = mc.predict_ev(env, episodes, target_policy, start)
 assert np.isclose(V[start], -0.27726, rtol=1e-2)
 assert N[start] == episodes
 
-target_policyM = np.zeros(spaces.shape(env.state_space), dtype=int)
-target_policyM[:len(bj.Hand), :len(bj.Card)] = target_policy
-target_policyM = target_policyM.reshape(spaces.size(env.state_space))
-V, delta, iter = dp.V_policy_eval_deter_sync(env, target_policyM, tol=1e-9)
+# Model-based policy evaluation using dynamic programming
+env.build_model()
+target_policy = np.zeros(spaces.shape(env.state_space), dtype=int)
+target_policy[:len(bj.Hand), :len(bj.Card)] = stand_on_20.copy()
+target_policy = target_policy.reshape(spaces.size(env.state_space))
+V, delta, iter = dp.V_policy_eval_deter_sync(env, target_policy, tol=1e-9)
 V.reshape(spaces.shape(env.state_space))[start]
