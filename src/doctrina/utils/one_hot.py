@@ -5,7 +5,9 @@
 
 import numpy as np
 
+
 def one_hot_encode(arr, size):
     one_hot = np.zeros((arr.size, size))
-    one_hot[np.arange(arr.size), arr] = 1.
+    one_hot[np.arange(arr.size), arr] = 1
     return one_hot
+

@@ -17,17 +17,17 @@ def is_deterministic(policy):
 def is_stochastic(policy):
     return np.issubdtype(policy.dtype, np.floating)
 
-def epsilon_soft(policy0, nA, epsilon):
+def epsilon_soft(policy0, A, epsilon):
     assert is_deterministic(policy0)
-    policy = (policy0[..., None] == np.arange(nA)).astype(float)
+    policy = (policy0[..., None] == np.arange(A)).astype(float)
     policy *= 1. - epsilon
-    policy += epsilon / nA
+    policy += epsilon / A
     assert is_stochastic(policy)
     return policy
 
 def epsilon_greedy(Q, epsilon):
-    nA = len(Q)
-    policy = np.full(nA, epsilon / nA)
+    A = len(Q)
+    policy = np.full(A, epsilon / A)
     policy[np.argmax(Q)] += 1. - epsilon
     return policy
 
@@ -61,19 +61,6 @@ def predict_ev(env, episodes, policy, start=None, gamma=1.):
 def value_predict(env, policy, start=None, gamma=1., episodes=10**6):
     """
     Last-visit Monte Carlo prediction.
-    
-    Args:
-        env: An OpenAI Gym environment.
-        policy: A NumPy array of the same shape as the environment's observation space. 
-        start: Defaults to None.
-        episodes: The number of episodes to be evaluated. Defaults to one million episodes.
-        gamma: The discount rate between successive steps within each episode. Defaults to 1..
-
-    Returns:
-        the value function of the policy.
-
-    _Sutton and Barto:
-        http://incompleteideas.net/book/the-book.html
     """
     V = 0.
     for _ in tqdm(range(episodes)):
@@ -126,14 +113,14 @@ def control_ev_eps(env, episodes, policy0=None, epsilon0=None, gamma=1.):
     state_shape        = spaces.shape(env.observation_space)
     action_shape       = spaces.shape(env.action_space)
     state_action_shape = (*state_shape, *action_shape)
-    Q      = np.zeros(state_action_shape           )
-    N      = np.zeros(state_action_shape, dtype=int)
-    nA = spaces.size(env.action_space)
-    epsilon = 1. / nA if epsilon0 is None else epsilon0
+    Q = np.zeros(state_action_shape           )
+    N = np.zeros(state_action_shape, dtype=int)
+    A = spaces.size(env.action_space)
+    epsilon = 1. / A if epsilon0 is None else epsilon0
     if policy0 is None:
-        policy = epsilon_soft(np.zeros(state_shape, dtype=int), nA, epsilon) 
+        policy = epsilon_soft(np.zeros(state_shape, dtype=int), A, epsilon) 
     elif is_deterministic(policy0):
-        policy = epsilon_soft(policy0, nA, epsilon) 
+        policy = epsilon_soft(policy0, A, epsilon) 
     else:
         assert is_stochastic(policy0)
         assert (policy0.sum(axis=2) == 1.).all()
