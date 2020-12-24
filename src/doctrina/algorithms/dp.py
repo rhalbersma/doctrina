@@ -16,7 +16,7 @@ from doctrina.utils import one_hot_encode
 
 
 def policy_init_deter(env):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     return np.zeros(S, dtype=int)
 
 
@@ -32,7 +32,7 @@ def policy_init_stoch(env):
 
 
 def V_policy_eval_stoch_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     iter = 0
     while True:
@@ -46,7 +46,7 @@ def V_policy_eval_stoch_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=1
 
 
 def Q_policy_eval_stoch_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     iter = 0
     while True:
@@ -60,7 +60,7 @@ def Q_policy_eval_stoch_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=1
 
 
 def V_policy_eval_stoch_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     iter = 0
     while True:
@@ -76,7 +76,7 @@ def V_policy_eval_stoch_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=
 
 
 def Q_policy_eval_stoch_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     iter = 0
     while True:
@@ -92,7 +92,7 @@ def Q_policy_eval_stoch_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=
 
 
 def V_policy_eval_deter_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     iter = 0
     while True:
@@ -106,7 +106,7 @@ def V_policy_eval_deter_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=1
 
 
 def Q_policy_eval_deter_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     iter = 0
     while True:
@@ -120,7 +120,7 @@ def Q_policy_eval_deter_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=1
 
 
 def V_policy_eval_deter_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     iter = 0
     while True:
@@ -136,7 +136,7 @@ def V_policy_eval_deter_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=
 
 
 def Q_policy_eval_deter_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     iter = 0
     while True:
@@ -182,7 +182,7 @@ def Q_policy_impr_stoch(env, Q):
 
 
 def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, impr=V_policy_impr_deter, policy0=None, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     policy = init(env) if policy0 is None else policy0
     evaluations = improvements = 0
@@ -199,7 +199,7 @@ def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, im
 
 
 def Q_policy_iter(env, init=policy_init_deter, eval=Q_policy_eval_deter_sync, impr=Q_policy_impr_deter, policy0=None, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     policy = init(env) if policy0 is None else policy0
     evaluations = improvements = 0
@@ -235,7 +235,7 @@ def Q_value_update_sync(env, Q, gamma=1.):
 
 
 def V_value_update_async(env, V, gamma=1.):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     delta = 0.
     for s in range(S):
         v = V[s]
@@ -245,7 +245,7 @@ def V_value_update_async(env, V, gamma=1.):
 
 
 def Q_value_update_async(env, Q, gamma=1.):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     delta = 0.
     for s, a in product(range(S), range(A)):
         q = Q[s, a]
@@ -260,7 +260,7 @@ def Q_value_update_async(env, Q, gamma=1.):
 
 
 def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    S = spaces.size(env.state_space)
+    S = spaces.size(env.observation_space) + 1
     V = np.zeros(S) if V0 is None else V0
     iter = 0
     while True:
@@ -273,7 +273,7 @@ def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=N
 
 
 def Q_value_iter(env, update=Q_value_update_sync, impr=Q_policy_impr_deter, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    S, A = spaces.size(env.state_space), spaces.size(env.action_space)
+    S, A = spaces.size(env.observation_space) + 1, spaces.size(env.action_space)
     Q = np.zeros((S, A)) if Q0 is None else Q0
     iter = 0
     while True:

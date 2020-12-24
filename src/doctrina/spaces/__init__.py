@@ -3,4 +3,4 @@
 #    (See accompanying file LICENSE_1_0.txt or copy at
 #          http://www.boost.org/LICENSE_1_0.txt)
 
-from .utils import shape, size
+from .utils import shape, size, state_table
