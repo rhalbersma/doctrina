@@ -195,7 +195,7 @@ def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, im
         policy_stable = (policy == old_policy).all()
         if policy_stable or (evaluations + improvements) >= maxiter:
             break
-    return V, policy, delta, evaluations, improvements
+    return policy, V, delta, evaluations, improvements
 
 
 def Q_policy_iter(env, init=policy_init_deter, eval=Q_policy_eval_deter_sync, impr=Q_policy_impr_deter, policy0=None, Q0=None, gamma=1., tol=1e-6, maxiter=100):
@@ -212,7 +212,7 @@ def Q_policy_iter(env, init=policy_init_deter, eval=Q_policy_eval_deter_sync, im
         policy_stable = (policy == old_policy).all()
         if policy_stable or (evaluations + improvements) >= maxiter:
             break
-    return Q, policy, delta, evaluations, improvements
+    return policy, Q, delta, evaluations, improvements
 
 
 ################################################################################
@@ -269,7 +269,7 @@ def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=N
         if delta < tol or iter >= maxiter:
             break
     policy = impr(env, V, gamma)
-    return V, policy, delta, iter
+    return policy, V, delta, iter
 
 
 def Q_value_iter(env, update=Q_value_update_sync, impr=Q_policy_impr_deter, Q0=None, gamma=1., tol=1e-6, maxiter=100):
@@ -282,5 +282,5 @@ def Q_value_iter(env, update=Q_value_update_sync, impr=Q_policy_impr_deter, Q0=N
         if delta < tol or iter >= maxiter:
             break
     policy = impr(env, Q)
-    return Q, policy, delta, iter
+    return policy, Q, delta, iter
 

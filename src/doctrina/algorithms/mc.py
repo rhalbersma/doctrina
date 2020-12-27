@@ -20,26 +20,30 @@ def is_stochastic(policy):
 def epsilon_soft(policy0, A, epsilon):
     assert is_deterministic(policy0)
     policy = (policy0[..., None] == np.arange(A)).astype(float)
-    policy *= 1. - epsilon
+    policy *= 1 - epsilon
     policy += epsilon / A
     assert is_stochastic(policy)
     return policy
 
+def argmax_random(x):
+    return np.random.choice(np.flatnonzero(x == x.max()))
+
 def epsilon_greedy(Q, epsilon):
     A = len(Q)
     policy = np.full(A, epsilon / A)
-    policy[np.argmax(Q)] += 1. - epsilon
+    policy[argmax_random(Q)] += 1 - epsilon
     return policy
 
 def sample(np_random, policy):   
     return np_random.choice(np.arange(np.size(policy)), p=policy)
 
-def predict_ev(env, episodes, policy, start=None, gamma=1.):
+def V_policy_eval(env, policy, episodes, V0=None, N0=None, gamma=1.):
     """
     Every-visit Monte Carlo prediction.
     """    
-    V = np.zeros(spaces.shape(env.observation_space)           )
-    N = np.zeros(spaces.shape(env.observation_space), dtype=int)
+    S = spaces.size(env.observation_space)
+    V = np.zeros((S))            if V0 is None else V0
+    N = np.zeros((S), dtype=int) if N0 is None else N0
     for _ in tqdm(range(episodes)):
         trajectory = []
         s = env.reset() if start is None else env.explore(start)        
@@ -57,6 +61,28 @@ def predict_ev(env, episodes, policy, start=None, gamma=1.):
             N[s] += 1
             V[s] += (G - V[s]) / N[s]
     return V, N
+
+def Q_policy_eval(env, policy, episodes, Q0=None, N0=None, gamma=1.):
+    S = spaces.size(env.observation_space)
+    A = spaces.size(env.action_space)
+    Q = np.zeros((S, A))            if Q0 is None else Q0
+    N = np.zeros((S, A), dtype=int) if N0 is None else N0
+    for _ in tqdm(episodes):
+        s = env.reset()        
+        while True:
+            a = sample(env.np_random, policy[s]) 
+            next, R, done, _ = env.step(a)
+            trajectory.append((s, a, R))
+            if done:
+                break
+            s = next
+        G = 0.
+        for s, a, R in reversed(trajectory):
+            G *= gamma
+            G += R
+            N[s, a] += 1
+            Q[s, a] += (G - Q[s, a]) / N[s, a]
+    return Q, N        
 
 def value_predict(env, policy, start=None, gamma=1., episodes=10**6):
     """
@@ -106,26 +132,36 @@ def control_es(env, episodes, policy0=None, gamma=1.):
     assert (policy == Q.argmax(axis=2)).all()
     return policy, Q, N
 
-def control_ev_eps(env, episodes, policy0=None, epsilon0=None, gamma=1.):
+def Q_policy_iter_bandit_eps(envs, episodes, epsilon, Q0=None, N0=None):
+    runs = len(envs)
+    a = np.full((runs, episodes),   -1, dtype=int)
+    R = np.full((runs, episodes), None, dtype=float)
+    for r, env in enumerate(tqdm(envs)):
+        assert spaces.size(env.observation_space) == 1
+        A = spaces.size(env.action_space)
+        Q = np.zeros(A)            if Q0 is None else Q0
+        N = np.zeros(A, dtype=int) if N0 is None else N0
+        policy = np.full(A, 1 / A)
+        for t in range(episodes):
+            env.reset()
+            a[r, t] = sample(env.np_random, policy) 
+            _, R[r, t], done, _ = env.step(a[r, t])
+            assert done
+            N[a[r, t]] += 1
+            Q[a[r, t]] += (R[r, t] - Q[a[r, t]]) / N[a[r, t]]
+            policy = epsilon_greedy(Q, epsilon)            
+    return a, R
+
+def Q_policy_iter_ev_eps(env, episodes, epsilon, Q0=None, N0=None, gamma=1.):
     """
     On-policy every-visit MC control (for epsilon-soft policies).
     """
-    state_shape        = spaces.shape(env.observation_space)
-    action_shape       = spaces.shape(env.action_space)
-    state_action_shape = (*state_shape, *action_shape)
-    Q = np.zeros(state_action_shape           )
-    N = np.zeros(state_action_shape, dtype=int)
+    S = spaces.size(env.observation_space)
     A = spaces.size(env.action_space)
-    epsilon = 1. / A if epsilon0 is None else epsilon0
-    if policy0 is None:
-        policy = epsilon_soft(np.zeros(state_shape, dtype=int), A, epsilon) 
-    elif is_deterministic(policy0):
-        policy = epsilon_soft(policy0, A, epsilon) 
-    else:
-        assert is_stochastic(policy0)
-        assert (policy0.sum(axis=2) == 1.).all()
-        policy = copy.deepcopy(policy0)
-    for _ in tqdm(range(episodes)):
+    Q = np.zeros((S, A))            if Q0 is None else Q0
+    N = np.zeros((S, A), dtype=int) if N0 is None else N0
+    policy = np.full((S, A), 1 / A)
+    for _ in range(episodes):
         episode = []
         s = env.reset()
         while True:
@@ -144,7 +180,7 @@ def control_ev_eps(env, episodes, policy0=None, epsilon0=None, gamma=1.):
             policy[s] = epsilon_greedy(Q[s], epsilon)            
     return policy, Q, N
 
-def control_ev_ucb(env, episodes, policy0=None, c=2., eps=1e-6, gamma=1.):
+def Q_policy_iter_ucb(env, episodes, policy0=None, c=2., eps=1e-6, gamma=1.):
     """
     On-policy every-visit MC control (using Upper-Confidence Bounds).
     """
