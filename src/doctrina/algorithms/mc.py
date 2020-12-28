@@ -7,6 +7,7 @@ import copy
 import numbers
 
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
 from doctrina import spaces
@@ -25,14 +26,22 @@ def epsilon_soft(policy0, A, epsilon):
     assert is_stochastic(policy)
     return policy
 
+
 def argmax_random(x):
     return np.random.choice(np.flatnonzero(x == x.max()))
 
+
 def epsilon_greedy(Q, epsilon):
-    A = len(Q)
-    policy = np.full(A, epsilon / A)
-    policy[argmax_random(Q)] += 1 - epsilon
-    return policy
+    if epsilon == 0 or np.random.rand(1) > epsilon:
+        return argmax_random(Q)
+    else:
+        return np.random.randint(len(Q))
+
+
+def upper_confidence_bound(Q, N, t, c):
+    ucb = Q + c * np.sqrt(np.log(t + 1) / N)
+    return argmax_random(ucb)
+
 
 def sample(np_random, policy):   
     return np_random.choice(np.arange(np.size(policy)), p=policy)
@@ -132,25 +141,81 @@ def control_es(env, episodes, policy0=None, gamma=1.):
     assert (policy == Q.argmax(axis=2)).all()
     return policy, Q, N
 
-def Q_policy_iter_bandit_eps(envs, episodes, epsilon, Q0=None, N0=None):
+
+def Q_policy_iter_bandit_eps(envs, steps, epsilon, Q0=0, alpha=0):
     runs = len(envs)
-    a = np.full((runs, episodes),   -1, dtype=int)
-    R = np.full((runs, episodes), None, dtype=float)
+    a_hist = np.full((runs, steps),   -1, dtype=int)
+    R_hist = np.full((runs, steps), None, dtype=float)
     for r, env in enumerate(tqdm(envs)):
         assert spaces.size(env.observation_space) == 1
+        env.seed()
         A = spaces.size(env.action_space)
-        Q = np.zeros(A)            if Q0 is None else Q0
-        N = np.zeros(A, dtype=int) if N0 is None else N0
-        policy = np.full(A, 1 / A)
-        for t in range(episodes):
-            env.reset()
-            a[r, t] = sample(env.np_random, policy) 
-            _, R[r, t], done, _ = env.step(a[r, t])
-            assert done
-            N[a[r, t]] += 1
-            Q[a[r, t]] += (R[r, t] - Q[a[r, t]]) / N[a[r, t]]
-            policy = epsilon_greedy(Q, epsilon)            
-    return a, R
+        Q = np.full(A, Q0, dtype=float)
+        if not alpha:
+            N = np.zeros(A, dtype=int)
+        for t in range(steps):
+            a = epsilon_greedy(Q, epsilon) 
+            _, R, _, _ = env.step(a)
+            if not alpha:
+                N[a] += 1
+                Q[a] += (R - Q[a]) / N[a]
+            else:
+                Q[a] += (R - Q[a]) * alpha
+            a_hist[r, t] = a
+            R_hist[r, t] = R
+    return a_hist, R_hist
+
+
+def Q_policy_iter_bandit_ucb(envs, steps, c, epsilon=1e-6, Q0=0, alpha=0):
+    runs = len(envs)
+    a_hist = np.full((runs, steps),   -1, dtype=int)
+    R_hist = np.full((runs, steps), None, dtype=float)
+    for r, env in enumerate(tqdm(envs)):
+        assert spaces.size(env.observation_space) == 1
+        env.seed()
+        A = spaces.size(env.action_space)
+        Q = np.full(A, Q0, dtype=float)
+        N = np.zeros(A, dtype=int)
+        for t in range(steps):
+            a = upper_confidence_bound(Q, N + epsilon, t, c)
+            _, R, _, _ = env.step(a)
+            N[a] += 1
+            if not alpha:
+                Q[a] += (R - Q[a]) / N[a]
+            else:
+                Q[a] += (R - Q[a]) * alpha
+            a_hist[r, t] = a
+            R_hist[r, t] = R
+    return a_hist, R_hist
+
+
+def action_history(a, id, parameter): 
+    return (pd
+        .DataFrame(a)
+        .apply(lambda x: x.value_counts(normalize=True))
+        .fillna(0)
+        .T
+        .rename_axis('steps')
+        .reset_index()
+        .melt(id_vars='steps', var_name='arm', value_name='selected')
+        .assign(
+            id = id,
+            parameter = parameter
+        )
+    )
+
+
+def reward_history(R, id, parameter):
+    return (pd
+        .DataFrame(R.mean(axis=0), columns=['reward'])
+        .rename_axis('steps')
+        .reset_index()
+        .assign(
+            id = id,
+            parameter = parameter
+        )
+    )
+
 
 def Q_policy_iter_ev_eps(env, episodes, epsilon, Q0=None, N0=None, gamma=1.):
     """
