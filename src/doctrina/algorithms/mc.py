@@ -43,9 +43,13 @@ def upper_confidence_bound(Q, N, t, c, N0=1e-6):
     return Q + c * np.sqrt(np.log(t + 1) / (N + N0))
 
 
-
 def sample(policy):
     return np.random.choice(np.arange(np.size(policy)), p=policy)
+
+
+################################################################################
+# Action-value Monte Carlo control for multi-armed bandits.
+################################################################################
 
 
 def Q_control_bandit_eps(envs, T, epsilon=0.1, Q0=0, alpha=0):
@@ -112,6 +116,11 @@ def Q_control_bandit_grad(envs, T, alpha=0.1, Q0=0, tau=1, baseline=True):
     return policy, Q, N, R, a_hist, r_hist
 
 
+################################################################################
+# Post-processing for multi-armed bandit action and reward histories.
+################################################################################
+
+
 def action_history(a_hist, description, **kwargs):
     return (pd
         .DataFrame(a_hist)
@@ -138,6 +147,11 @@ def reward_history(r_hist, description, **kwargs):
             **kwargs
         )
     )
+
+
+################################################################################
+# Monte Carlo control for multi-armed bandits
+################################################################################
 
 
 def V_policy_eval(env, policy, episodes, V0=None, N0=None, gamma=1.):
