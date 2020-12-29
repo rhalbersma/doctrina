@@ -30,7 +30,7 @@ class MultiArmedBanditEnv(gym.Env):
         There is an unbounded continuous reward range.
     """
 
-    def __init__(self, k=10, mu=0, sigma=1, s=1, steps=1_000):
+    def __init__(self, k=10, mu=0, sigma=1, s=1, steps=1_000, stationary=True):
         """
         Initialize the state of the environment.
 
@@ -66,7 +66,7 @@ class MultiArmedBanditEnv(gym.Env):
     def step(self, action):
         if self.time >= self.steps:
             self.time = 0
-        R = self.q_star[action] + self.reward[self.time]        
+        reward = self.q_star[action] + self.reward[self.time]        
         self.time += 1
-        return 0, R, True, {}
+        return 0, reward, True, {}
 
