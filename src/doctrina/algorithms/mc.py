@@ -67,7 +67,7 @@ def Q_control_bandit_eps(envs, T, epsilon=0.1, Q0=0, alpha=0):
             r_hist[s, t] = r
             N[s, a] += 1
             step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += (r - Q[s, a]) * step_size
+            Q[s, a] += step_size * (r - Q[s, a])
             R[s] += (r - R[s]) / (t + 1)
     return None, Q, N, R, a_hist, r_hist
 
@@ -88,7 +88,7 @@ def Q_control_bandit_ucb(envs, T, c=2, Q0=0, alpha=0):
             r_hist[s, t] = r
             N[s, a] += 1
             step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += (r - Q[s, a]) * step_size
+            Q[s, a] += step_size * (r - Q[s, a])
             R[s] += (r - R[s]) / (t + 1)
             policy[s] = upper_confidence_bound(Q[s], N[s], t + 1, c)
     return policy, Q, N, R, a_hist, r_hist
