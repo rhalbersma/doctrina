@@ -8,7 +8,6 @@ import numbers
 
 import numpy as np
 import pandas as pd
-from scipy.special import softmax
 from tqdm import tqdm
 
 from doctrina import spaces
@@ -47,120 +46,13 @@ def sample(policy):
     return np.random.choice(np.arange(np.size(policy)), p=policy)
 
 
-################################################################################
-# Action-value Monte Carlo control for multi-armed bandits.
-################################################################################
-
-
-def Q_control_bandit_eps(envs, T, epsilon=0.1, Q0=0, alpha=0):
-    S, A = np.size(envs), spaces.size(envs[0].action_space)
-    Q = np.full((S, A), Q0, dtype=float)
-    N = np.zeros((S, A), dtype=int)
-    R = np.zeros(S)
-    a_hist = np.full((S, T),   -1, dtype=int)
-    r_hist = np.full((S, T), None, dtype=float)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(T):
-            a = epsilon_greedy(Q[s], epsilon)
-            _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
-            N[s, a] += 1
-            step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += step_size * (r - Q[s, a])
-            R[s] += (r - R[s]) / (t + 1)
-    return None, Q, N, R, a_hist, r_hist
-
-
-def Q_control_bandit_ucb(envs, T, c=2, Q0=0, alpha=0):
-    S, A = np.size(envs), spaces.size(envs[0].action_space)
-    policy = np.zeros((S, A))
-    Q = np.full((S, A), Q0, dtype=float)
-    N = np.zeros((S, A), dtype=int)
-    R = np.zeros(S)
-    a_hist = np.full((S, T),   -1, dtype=int)
-    r_hist = np.full((S, T), None, dtype=float)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(T):
-            a = argmax_random(policy[s])
-            _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
-            N[s, a] += 1
-            step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += step_size * (r - Q[s, a])
-            R[s] += (r - R[s]) / (t + 1)
-            policy[s] = upper_confidence_bound(Q[s], N[s], t + 1, c)
-    return policy, Q, N, R, a_hist, r_hist
-
-
-def Q_control_bandit_grad(envs, T, alpha=0.1, Q0=0, tau=1, baseline=True):
-    S, A = np.size(envs), spaces.size(envs[0].action_space)
-    policy = np.full((S, A), 1 / A)
-    Q = np.full((S, A), Q0, dtype=float)
-    N = np.zeros((S, A), dtype=int)
-    R = np.zeros(S)
-    a_hist = np.full((S, T),   -1, dtype=int)
-    r_hist = np.full((S, T), None, dtype=float)
-    id = np.identity(A)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(T):
-            a = sample(policy[s])
-            _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
-            N[s, a] += 1
-            Q[s] += alpha * (r - R[s] * baseline) * (id[a] - policy[s])
-            R[s] += (r - R[s]) / (t + 1)
-            policy[s] = softmax(tau * Q[s])
-    return policy, Q, N, R, a_hist, r_hist
-
-
-################################################################################
-# Post-processing for multi-armed bandit action and reward histories.
-################################################################################
-
-
-def action_history(a_hist, description, **kwargs):
-    return (pd
-        .DataFrame(a_hist)
-        .apply(lambda x: x.value_counts(normalize=True))
-        .fillna(0)
-        .T
-        .rename_axis('steps')
-        .reset_index()
-        .melt(id_vars='steps', var_name='arm', value_name='selected')
-        .assign(
-            description = description,
-            **kwargs
-        )
-    )
-
-
-def reward_history(r_hist, description, **kwargs):
-    return (pd
-        .DataFrame(r_hist.mean(axis=0), columns=['reward'])
-        .rename_axis('steps')
-        .reset_index()
-        .assign(
-            description = description,
-            **kwargs
-        )
-    )
-
-
-################################################################################
-# Monte Carlo control for multi-armed bandits
-################################################################################
-
-
-def V_policy_eval(env, policy, episodes, V0=None, N0=None, gamma=1.):
+def V_predict_ev(env, policy, episodes, start=None, gamma=1.):
     """
     Every-visit Monte Carlo prediction.
     """
-    S = spaces.size(env.observation_space)
-    V = np.zeros((S))            if V0 is None else V0
-    N = np.zeros((S), dtype=int) if N0 is None else N0
+    S = spaces.shape(env.observation_space)
+    V = np.zeros(S)
+    N = np.zeros(S, dtype=int)
     for _ in tqdm(range(episodes)):
         trajectory = []
         s = env.reset() if start is None else env.explore(start)
@@ -179,15 +71,17 @@ def V_policy_eval(env, policy, episodes, V0=None, N0=None, gamma=1.):
             V[s] += (G - V[s]) / N[s]
     return V, N
 
-def Q_policy_eval(env, policy, episodes, Q0=None, N0=None, gamma=1.):
+
+def Q_predict_ev(env, policy, episodes, start=None, Q0=None, N0=None, gamma=1.):
     S = spaces.size(env.observation_space)
     A = spaces.size(env.action_space)
     Q = np.zeros((S, A))            if Q0 is None else Q0
     N = np.zeros((S, A), dtype=int) if N0 is None else N0
     for _ in tqdm(episodes):
-        s = env.reset()
+        trajectory = []
+        s = env.reset() if start is None else env.explore(start)
         while True:
-            a = sample(env.np_random, policy[s])
+            a = sample(policy[s])
             next, R, done, _ = env.step(a)
             trajectory.append((s, a, R))
             if done:
@@ -201,7 +95,7 @@ def Q_policy_eval(env, policy, episodes, Q0=None, N0=None, gamma=1.):
             Q[s, a] += (G - Q[s, a]) / N[s, a]
     return Q, N
 
-def value_predict(env, policy, start=None, gamma=1., episodes=10**6):
+def value_predict(env, policy, start, gamma=1., episodes=10**6):
     """
     Last-visit Monte Carlo prediction.
     """
@@ -262,7 +156,7 @@ def Q_policy_iter_ev_eps(env, episodes, epsilon, Q0=None, N0=None, gamma=1.):
         episode = []
         s = env.reset()
         while True:
-            a = sample(env.np_random, policy[s])
+            a = sample(policy[s])
             next, R, done, _ = env.step(a)
             episode.append((s, a, R))
             if done:

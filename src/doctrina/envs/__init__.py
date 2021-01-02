@@ -20,5 +20,5 @@ def register(id, entry_point, force=True):
 
 register(
     id='Bandit-v0',
-    entry_point='doctrina.envs.bandit:MultiArmedBanditEnv',
+    entry_point='doctrina.envs.multi_armed_bandit:MultiArmedBanditEnv',
 )

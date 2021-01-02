@@ -5,6 +5,10 @@
 [![License](https://img.shields.io/badge/license-Boost-blue.svg)](https://opensource.org/licenses/BSL-1.0)
 [![Lines of Code](https://tokei.rs/b1/github/rhalbersma/doctrina?category=code)](https://github.com/rhalbersma/doctrina)
 
+## Overview
+
+This repository consists of several notebooks with my attempts at the (programming) exercises from the first few chapters of the book [Reinforcement Learning, an Introduction](http://incompleteideas.net/book/RLbook2020.pdf), second edition, by Richard S. Sutton and Andrew G. Barto (2018). The plan is to work through the book up to and including at least Chapter 6 (Temporal-Difference Learning), reproducing all the figures and completing all the exercises. The various environments have been implemented in Python using the [OpenAI Gym toolkit](https://gym.openai.com/).
+
 ## Requirements
 
 - Python version 3.6 or higher
