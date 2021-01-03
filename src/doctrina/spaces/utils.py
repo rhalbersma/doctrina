@@ -23,5 +23,5 @@ def size(space):
 
 
 def state_table(table, env):
-    return table.reshape(shape(env.observation_space))
+    return table.reshape(env.observation_shape)
 
