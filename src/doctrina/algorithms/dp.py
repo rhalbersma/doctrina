@@ -15,7 +15,7 @@ from doctrina.utils import one_hot_encode
 
 
 def policy_init_deter(env):
-    return np.zeros(env.nS + 1, dtype=int)
+    return np.zeros(env.nS, dtype=int)
 
 
 def policy_init_stoch(env):
@@ -24,14 +24,27 @@ def policy_init_stoch(env):
 
 
 ################################################################################
+# Transforming between state and state-action value functions.
+################################################################################
+
+
+def Q_from_V(env, V, gamma=1.):
+    P, R = env.transition, env.reward
+    return R + gamma * P @ V
+
+
+def V_from_Q(Q):
+    return Q.max(axis=1)
+
+
+################################################################################
 # Policy evaluation: policy -> value function.
 ################################################################################
 
 
-def V_policy_eval_stoch_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
+def V_policy_eval_stoch_sync(env, policy, V0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    V = np.zeros(nS) if V0 is None else V0
+    V = np.zeros(env.nS) if V0 is None else V0
     iter = 0
     while True:
         v = V
@@ -43,10 +56,9 @@ def V_policy_eval_stoch_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=1
     return V, delta, iter
 
 
-def Q_policy_eval_stoch_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
+def Q_policy_eval_stoch_sync(env, policy, Q0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         q = Q
@@ -58,14 +70,13 @@ def Q_policy_eval_stoch_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=1
     return Q, delta, iter
 
 
-def V_policy_eval_stoch_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
+def V_policy_eval_stoch_async(env, policy, V0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    V = np.zeros(nS) if V0 is None else V0
+    V = np.zeros(env.nS) if V0 is None else V0
     iter = 0
     while True:
         delta = 0.
-        for s in range(nS):
+        for s in range(env.nS):
             v = V[s]
             V[s] = np.sum(policy[s] * (R[s] + gamma * P[s] @ V))
             delta = np.maximum(delta, np.abs(v - V[s]))
@@ -75,14 +86,13 @@ def V_policy_eval_stoch_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=
     return V, delta, iter
 
 
-def Q_policy_eval_stoch_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
+def Q_policy_eval_stoch_async(env, policy, Q0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         delta = 0.
-        for s, a in product(range(nS), range(nA)):
+        for s, a in product(range(env.nS), range(env.nA)):
             q = Q[s, a]
             Q[s, a] = R[s, a] + gamma * P[s, a] @ np.sum(policy * Q, axis=1)
             delta = np.maximum(delta, np.abs(q - Q[s, a]))
@@ -92,10 +102,9 @@ def Q_policy_eval_stoch_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=
     return Q, delta, iter
 
 
-def V_policy_eval_deter_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
+def V_policy_eval_deter_sync(env, policy, V0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    V = np.zeros(nS) if V0 is None else V0
+    V = np.zeros(env.nS) if V0 is None else V0
     iter = 0
     while True:
         v = V
@@ -107,10 +116,9 @@ def V_policy_eval_deter_sync(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=1
     return V, delta, iter
 
 
-def Q_policy_eval_deter_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
+def Q_policy_eval_deter_sync(env, policy, Q0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         q = Q
@@ -122,14 +130,13 @@ def Q_policy_eval_deter_sync(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=1
     return Q, delta, iter
 
 
-def V_policy_eval_deter_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
+def V_policy_eval_deter_async(env, policy, V0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    V = np.zeros(nS) if V0 is None else V0
+    V = np.zeros(env.nS) if V0 is None else V0
     iter = 0
     while True:
         delta = 0.
-        for s in range(nS):
+        for s in range(env.nS):
             v = V[s]
             V[s] = R[s, policy[s]] + gamma * P[s, policy[s]] @ V
             delta = np.maximum(delta, np.abs(v - V[s]))
@@ -139,14 +146,13 @@ def V_policy_eval_deter_async(env, policy, V0=None, gamma=1., tol=1e-6, maxiter=
     return V, delta, iter
 
 
-def Q_policy_eval_deter_async(env, policy, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
+def Q_policy_eval_deter_async(env, policy, Q0=None, gamma=1., tol=1e-8, maxiter=100):
     P, R = env.transition, env.reward
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         delta = 0.
-        for s, a in product(range(nS), range(nA)):
+        for s, a in product(range(env.nS), range(env.nA)):
             q = Q[s, a]
             Q[s, a] = R[s, a] + gamma * P[s, a] @ np.choose(policy, Q.T)
             delta = np.maximum(delta, np.abs(q - Q[s, a]))
@@ -185,9 +191,8 @@ def Q_policy_impr_stoch(env, Q):
 ################################################################################
 
 
-def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, impr=V_policy_impr_deter, policy0=None, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
-    V = np.zeros(nS) if V0 is None else V0
+def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, impr=V_policy_impr_deter, policy0=None, V0=None, gamma=1., tol=1e-8, maxiter=100_000):
+    V = np.zeros(env.nS) if V0 is None else V0
     policy = init(env) if policy0 is None else policy0
     evaluations = improvements = 0
     while True:
@@ -202,9 +207,8 @@ def V_policy_iter(env, init=policy_init_deter, eval=V_policy_eval_deter_sync, im
     return policy, V, delta, evaluations, improvements
 
 
-def Q_policy_iter(env, init=policy_init_deter, eval=Q_policy_eval_deter_sync, impr=Q_policy_impr_deter, policy0=None, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+def Q_policy_iter(env, init=policy_init_deter, eval=Q_policy_eval_deter_sync, impr=Q_policy_impr_deter, policy0=None, Q0=None, gamma=1., tol=1e-8, maxiter=100_000):
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     policy = init(env) if policy0 is None else policy0
     evaluations = improvements = 0
     while True:
@@ -241,10 +245,9 @@ def Q_value_update_sync(env, Q, gamma=1.):
 
 
 def V_value_update_async(env, V, gamma=1.):
-    nS = env.nS + 1
     P, R = env.transition, env.reward
     delta = 0.
-    for s in range(nS):
+    for s in range(env.nS):
         v = V[s]
         V[s] = np.max(R[s] + gamma * P[s] @ V)
         delta = np.maximum(delta, np.abs(v - V[s]))
@@ -252,10 +255,9 @@ def V_value_update_async(env, V, gamma=1.):
 
 
 def Q_value_update_async(env, Q, gamma=1.):
-    nS, nA = env.nS + 1, env.nA
     P, R = env.transition, env.reward
     delta = 0.
-    for s, a in product(range(nS), range(nA)):
+    for s, a in product(range(env.nS), range(env.nA)):
         q = Q[s, a]
         Q[s, a] = R[s, a] + gamma * P[s, a] @ np.max(Q, axis=1)
         delta = np.maximum(delta, np.abs(q - Q[s, a]))
@@ -267,9 +269,8 @@ def Q_value_update_async(env, Q, gamma=1.):
 ################################################################################
 
 
-def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS = env.nS + 1
-    V = np.zeros(nS) if V0 is None else V0
+def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=None, gamma=1., tol=1e-8, maxiter=100_000):
+    V = np.zeros(env.nS) if V0 is None else V0
     iter = 0
     while True:
         V, delta = update(env, V, gamma)
@@ -280,9 +281,8 @@ def V_value_iter(env, update=V_value_update_sync, impr=V_policy_impr_deter, V0=N
     return policy, V, delta, iter
 
 
-def Q_value_iter(env, update=Q_value_update_sync, impr=Q_policy_impr_deter, Q0=None, gamma=1., tol=1e-6, maxiter=100):
-    nS, nA = env.nS + 1, env.nA
-    Q = np.zeros((nS, nA)) if Q0 is None else Q0
+def Q_value_iter(env, update=Q_value_update_sync, impr=Q_policy_impr_deter, Q0=None, gamma=1., tol=1e-8, maxiter=100_000):
+    Q = np.zeros((env.nS, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         Q, delta = update(env, Q, gamma)
