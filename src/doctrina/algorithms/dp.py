@@ -192,7 +192,7 @@ def V_policy_impr_stoch(env, V, gamma=1.):
 ################################################################################
 
 
-def V_policy_iter(env, stoch=False, sync=True, policy0=None, V0=None, gamma=1., tol=1e-8, maxiter=None):
+def V_policy_iter(env, stoch=False, sync=True, policy0=None, V0=None, gamma=1., tol=1e-8, maxiter=None, debug=False):
     if stoch:
         init =   policy_init_stoch
         eval = V_policy_eval_stoch_sync if sync else V_policy_eval_stoch_async
@@ -209,13 +209,15 @@ def V_policy_iter(env, stoch=False, sync=True, policy0=None, V0=None, gamma=1., 
         evaluations += iter
         old_policy = policy
         policy = impr(env, V, gamma)
+        if debug:
+            print(f'iter: {iter}, delta: {delta}')
         improvements += 1
         if delta < tol and (policy == old_policy).all():
             break
     return policy, V, { 'delta': delta, 'evaluations': evaluations, 'improvements': improvements }
 
 
-def Q_policy_iter(env, stoch=False, sync=True, policy0=None, Q0=None, gamma=1., tol=1e-8, maxiter=None):
+def Q_policy_iter(env, stoch=False, sync=True, policy0=None, Q0=None, gamma=1., tol=1e-8, maxiter=None, debug=False):
     if stoch:
         init =   policy_init_stoch
         eval = Q_policy_eval_stoch_sync if sync else Q_policy_eval_stoch_async
@@ -232,6 +234,8 @@ def Q_policy_iter(env, stoch=False, sync=True, policy0=None, Q0=None, gamma=1., 
         evaluations += iter
         old_policy = policy
         policy = impr(Q)
+        if debug:
+            print(f'iter: {iter}, delta: {delta}')
         improvements += 1
         if delta < tol and (policy == old_policy).all():
             break
@@ -300,13 +304,15 @@ def V_value_iter(env, stoch=False, sync=True, V0=None, gamma=1., tol=1e-8, debug
     return policy, V, { 'delta': delta, 'iter': iter }
 
 
-def Q_value_iter(env, stoch=False, sync=True, Q0=None, gamma=1., tol=1e-8):
+def Q_value_iter(env, stoch=False, sync=True, Q0=None, gamma=1., tol=1e-8, debug=False):
     update = Q_value_update_sync if sync  else Q_value_update_async
     impr   = Q_policy_impr_stoch if stoch else Q_policy_impr_deter
     Q = np.zeros((env.nSp, env.nA)) if Q0 is None else Q0
     iter = 0
     while True:
         Q, delta = update(env, Q, gamma)
+        if debug:
+            print(f'iter: {iter}, delta: {delta}')
         iter += 1
         if delta < tol:
             break
