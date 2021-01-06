@@ -310,5 +310,3 @@ def Q_value_iter(env, stoch=False, sync=True, Q0=None, gamma=1., tol=1e-8):
     policy = impr(Q)
     return policy, Q, { 'delta': delta, 'iter': iter }
 
-def fun():
-    return 0, { 'a': 1, 'b': 2 }
