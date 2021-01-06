@@ -177,7 +177,7 @@ def V_policy_impr_deter(env, V, gamma=1.):
 
 
 def Q_policy_impr_stoch(Q):
-    policy = (Q == Q.max(axis=1, keepdims=True)).astype(float)
+    policy = np.isclose(Q, Q.max(axis=1, keepdims=True)).astype(float)
     return policy / policy.sum(axis=1, keepdims=True)
 
 
