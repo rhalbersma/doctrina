@@ -6,6 +6,7 @@
 from itertools import product
 
 import numpy as np
+import scipy as sp
 
 from doctrina.utils import one_hot_encode
 
@@ -283,13 +284,15 @@ def Q_value_update_async(env, Q, gamma=1.):
 ################################################################################
 
 
-def V_value_iter(env, stoch=False, sync=True, V0=None, gamma=1., tol=1e-8):
+def V_value_iter(env, stoch=False, sync=True, V0=None, gamma=1., tol=1e-8, debug=False):
     update = V_value_update_sync if sync  else V_value_update_async
     impr   = V_policy_impr_stoch if stoch else V_policy_impr_deter
     V = np.zeros(env.nSp) if V0 is None else V0
     iter = 0
     while True:
         V, delta = update(env, V, gamma)
+        if debug:
+            print(f'iter: {iter}, delta: {delta}')
         iter += 1
         if delta < tol:
             break
