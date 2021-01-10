@@ -12,103 +12,166 @@ from gym.utils import seeding
 import numpy as np
 from scipy.stats import poisson
 
-mu_request_1, mu_request_2 = 3, 4
-mu_return_1, mu_return_2 = 3, 2
+################################################################################
+# Environment parameters.
+################################################################################
 
+# If Jack has a car available, he rents it out and is credited $10 by the national company.
+rent = 10
+
+# [...] ]Jack can move them between the two locations overnight, at a cost of $2 per car moved.
+cost =  2
+
+# Suppose lambda is 3 and 4 for rental requests at the first and second locations and 3 and 2 for returns.
+mu_request_1 = 3
+mu_request_2 = 4
+mu_return_1 = 3
+mu_return_2 = 2
+
+# [...] we assume that there can be no more than 20 cars at each location [...]
 max_evening = 20
+
+# [...] and a maximum of five cars can be moved from one location to the other in one night.
 max_movable =  5
 max_morning = max_evening + max_movable
-
-actions = np.arange(-max_movable, +max_movable + 1)
-
 nE = max_evening + 1
 nM = max_morning + 1
+
+actions = np.arange(-max_movable, +max_movable + 1, dtype=int)
+direction_1 = +1
+direction_2 = -1
 
 nS = nE**2
 nA = np.size(actions)
 nR = 2 * max_evening + 1
 
+# An individual location can rent up to 25 cars,
+# but both locations combined can rent up to 40 cars.
+rentals = [
+    (r1, r2)
+    for r1, r2 in product(range(nM), range(nM))
+    if (r1 + r2) < nR
+]
 
-def action_index(a):
-    return a + max_movable
+################################################################################
+# Auxiliary functions.
+################################################################################
 
 
-def clamp(x, lower, upper):
-    return np.maximum(lower, np.minimum(x, upper))
+def clamp(a, lower, upper):
+    """Clamp an action between lower and upper values."""
+    return np.maximum(lower, np.minimum(a, upper))
 
 
-def P_move(sign):
-    P = np.zeros((nA, nE, nM))
+def index(action):
+    """Compute the index of an action."""
+    return action + max_movable
+
+
+# clamped_actions[s1, s2, a] = clamped actions when moving a cars from s1 to s2.
+# For positive a, s1 is the upper bound; for negative a, s2 is the lower bound.
+clamped_actions = np.zeros((nE, nE, nA), dtype=int)
+for s1, s2 in product(range(nE), range(nE)):
+    clamped_actions[s1, s2] = index(clamp(actions, -s2, s1))
+
+################################################################################
+# Transition probability functions.
+################################################################################
+
+
+def prob_move(direction):
+    """
+    p[a, s, s'] = the probability of moving a cars and transitioning from state s to state s'.
+
+    Notes:
+        Positive (negative) actions correspond to cars are moved from (to) state s.
+        Negative actions are bounded by max_movable (=5); positive actions by the state s.
+    """
+    prob = np.zeros((nA, nE, nM))
     for evening in range(nE):
-        moved = clamp(sign * actions, -max_movable, min(evening, max_movable))
+        moved = clamp(direction * actions, -max_movable, min(evening, max_movable))
         for a in range(nA):
-            P[a, evening, evening - moved[a]] = 1
-    assert np.isclose(P.sum(axis=2), 1).all()
-    return P
+            prob[a, evening, evening - moved[a]] = 1
+    assert np.isclose(prob.sum(axis=2), 1).all()
+    return prob
 
 
-def P_request(mu_request):
-    P = np.zeros((nM, nM, nM))
+def prob_request(mu_request):
+    """
+    p[r, s, s'] = the probability of fullfilling r rental requests and transitioning from state s to state s'.
+
+    Notes:
+        Rental requests are bounded by the state s.
+        The probabilities are given by the Poisson distribution with mu = mu_request.
+    """
+    prob = np.zeros((nM, nM, nM))
     for morning in range(nM):
         for rented in range(morning + 1):
-            P[rented, morning, morning - rented] = poisson.pmf(rented, mu_request)
+            prob[rented, morning, morning - rented] = poisson.pmf(rented, mu_request)
         # Excess requests beyond what's available are captured by the survival function (== 1 - CDF)
-        P[morning, morning, 0] += poisson.sf(morning, mu_request)
-    assert np.isclose(P.sum(axis=(0, 2)), 1).all()
-    return P
+        prob[morning, morning, 0] += poisson.sf(morning, mu_request)
+    assert np.isclose(prob.sum(axis=(0, 2)), 1).all()
+    return prob
 
 
-def P_return(mu_return):
-    P = np.zeros((nM, nE))
+def prob_return(mu_return):
+    """
+    p[s, s'] = the probability of transitioning from state s to state s' after cars have been returned.
+
+    Notes:
+        Car returns are bounded by max_evening (=20).
+        The probabilities are given by the Poisson distribution with mu = mu_return.
+    """
+    prob = np.zeros((nM, nE))
     for afternoon in range(nM):
         for returned in range(nE - afternoon):
-            P[afternoon, afternoon + returned] = poisson.pmf(returned, mu_return)
-        # Excess returns beyond what can be kept are captured by teh survival function (== 1 - CDF)
-        P[afternoon, max_evening] += poisson.sf(max_evening - afternoon, mu_return)
-    assert np.isclose(P.sum(axis=1), 1).all()
-    return P
+            prob[afternoon, afternoon + returned] = poisson.pmf(returned, mu_return)
+        # Excess returns beyond what can be kept are captured by the survival function (== 1 - CDF)
+        prob[afternoon, max_evening] += poisson.sf(max_evening - afternoon, mu_return)
+    assert np.isclose(prob.sum(axis=1), 1).all()
+    return prob
 
 
-P_move_1 = P_move(+1)
-P_move_2 = P_move(-1)
-assert (P_move_1 == P_move_2[::-1]).all()
+def prob_location(direction, mu_request, mu_return):
+    """
+    p[a, r, s, s'] = the probability of moving a cars, renting r cars and transitioning from state s to s' after cars have been returned.
+    """
+    prob_mov = prob_move(direction)
+    prob_req = prob_request(mu_request)
+    prob_ret = prob_return(mu_return)
+    prob = np.zeros((nA, nM, nE, nE))
+    for a, r in product(range(nA), range(nM)):
+        prob[a, r] = prob_mov[a] @ prob_req[r] @ prob_ret
+    assert np.isclose(prob.sum(axis=(1, 3)), 1).all()
+    return prob
 
-P_request_1 = P_request(mu_request_1)
-P_request_2 = P_request(mu_request_2)
 
-P_return_1 = P_return(mu_return_1)
-P_return_2 = P_return(mu_return_2)
+def prob_daily():
+    """
+    p[s1, s2, a, r, s1', s2'] = the probability of moving a cars, renting r cars and transitioning from state (s1, s2) to (s1', s2') after cars have been returned.
+    """
+    prob_location_1 = prob_location(direction_1, mu_request_1, mu_return_1)
+    prob_location_2 = prob_location(direction_2, mu_request_2, mu_return_2)
+    prob = np.zeros((nE, nE, nA, nR, nE, nE))
+    for s1, s2, a in product(range(nE), range(nE), range(nA)):
+        m = clamped_actions[s1, s2, a]
+        for r1, r2 in rentals:
+            prob[s1, s2, a, r1 + r2] += prob_location_1[m, r1, s1].reshape((nE, 1)) * prob_location_2[m, r2, s2].reshape((1, nE))
+    return prob.transpose(0, 1, 2, 4, 5, 3).reshape((nS, nA, nS, nR))
 
-P1 = np.zeros((nM, nA, nE, nE))
-P2 = np.zeros((nM, nA, nE, nE))
-for a, r in product(range(nA), range(nM)):
-    P1[r, a] = P_move_1[a] @ P_request_1[r] @ P_return_1
-    P2[r, a] = P_move_2[a] @ P_request_2[r] @ P_return_2
-assert np.isclose(P1.sum(axis=(0, 3)), 1).all()
-assert np.isclose(P2.sum(axis=(0, 3)), 1).all()
 
-P12 = np.zeros((nR, nE, nE, nA, nE, nE))
-for r1, r2 in product(range(nM), range(nM)):
-    if (r1 + r2) < nR:
-        for s1, s2 in product(range(nE), range(nE)):
-            moved = clamp(actions, -s2, s1)
-            for a, m in zip(range(nA), action_index(moved)):
-                P12[r1 + r2, s1, s2, a] += P1[r1, m, s1].reshape((nE, 1)) * P2[r2, m, s2].reshape((1, nE))
+def reward_state_action_rentals():
+    reward = np.zeros((nS, nA, nR))
+    for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
+        for a, r in product(range(nA), range(nR)):
+            m = clamped_actions[s1, s2, a]
+            reward[s, a, r] = -abs(actions[a]) * cost + r * rent
+    return reward
 
-rent = 10
-cost =  2
-reward = np.zeros((nE, nE, nA))
-for r, s1, s2 in product(range(nR), range(nE), range(nE)):
-    moved = clamp(actions, -s2, s1)
-    for a, m in zip(range(nA), moved):
-        reward[s1, s2, a] += P12[r, s1, s2, a].sum() * (-abs(m) * cost + r * rent)
-reward = reward.reshape((nS, nA))
 
-P = P12.reshape((nR, nS, nA, nS)).transpose(1, 2, 3, 0)
-assert np.isclose(P.sum(axis=(2, 3)), 1).all()
-
-transition = P.sum(axis=3)
-assert np.isclose(transition.sum(axis=2), 1).all()
+################################################################################
+# Jack's Car Rental environment.
+################################################################################
 
 
 class JacksCarRentalEnv(discrete.DiscreteEnv):
@@ -118,15 +181,13 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
     http://incompleteideas.net/book/the-book-2nd.html
 
     Description:
-        The object of the multi-armed bandit problem is to minimize the
-        cumulative regret by discovering and selecting the arm with the
-        highest expected reward as often as possible.
+        The object of Jacks's Car Rental problem is to maximize cumulative profits.
 
     Observations:
-        There is a single unobservable state.
+        There are 21 * 21 = 441 states.
 
     Actions:
-        There are k actions, one for each of the k arms to select.
+        There are -5...+5 = 11 actions.
 
     Rewards:
         There is an unbounded continuous reward range.
@@ -136,10 +197,38 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         """
         Initialize the state of the environment.
         """
+        # Equation (3.2) in Sutton & Barto (p.48):
+        # p(s', r|s, a) = probability of transition to state s' with reward r, from state s and action a.
+        P_tensor = prob_daily()
 
+        # Equation (3.3) in Sutton & Barto (p.48):
+        assert np.isclose(P_tensor.sum(axis=(2, 3)), 1).all()
 
+        # Equation (3.4) in Sutton & Barto (p.49):
+        # p(s'|s, a) = probability of transition to state s', from state s taking action a.
+        self.transition = P_tensor.sum(axis=3)
+        assert np.isclose(self.transition.sum(axis=2), 1).all()
 
+        # Equation (3.5) in Sutton & Barto (p.49):
+        # r(s, a) = expected immediate reward from state s after action a.
+        immediate_reward = reward_state_action_rentals()
+        self.reward = np.sum(P_tensor.sum(axis=2) * immediate_reward, axis=2)
 
-        #super(JacksCarRentalEnv, self).__init__(nS, nA, P, isd)
+        P = {
+            s: {
+                a: [
+                    (P_tensor[s, a, next, r], next, immediate_reward[s, a, r], False)
+                    for next, r in product(range(nS), range(nR))
+                ]
+                for a in range(nA)
+            }
+            for s in range(nS)
+        }
 
+        isd = np.full(nS, 1 / nS)
+
+        # For continuing tasks, there is no terminal state.
+        self.nSp = nS
+
+        super(JacksCarRentalEnv, self).__init__(nS, nA, P, isd)
 
