@@ -19,7 +19,7 @@ from scipy.stats import poisson
 # If Jack has a car available, he rents it out and is credited $10 by the national company.
 rent = 10
 
-# [...] ]Jack can move them between the two locations overnight, at a cost of $2 per car moved.
+# [...] Jack can move them between the two locations overnight, at a cost of $2 per car moved.
 cost =  2
 
 # Suppose lambda is 3 and 4 for rental requests at the first and second locations and 3 and 2 for returns.
