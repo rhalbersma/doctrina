@@ -45,14 +45,6 @@ nS = nE**2
 nA = np.size(actions)
 nR = 2 * max_evening + 1
 
-# An individual location can rent up to 25 cars,
-# but both locations combined can rent up to 40 cars.
-rentals = [
-    (r1, r2)
-    for r1, r2 in product(range(nM), range(nM))
-    if (r1 + r2) < nR
-]
-
 ################################################################################
 # Auxiliary functions.
 ################################################################################
@@ -70,9 +62,9 @@ def index(action):
 
 # clamped_actions[s1, s2, a] = clamped actions when moving a cars from s1 to s2.
 # For positive a, s1 is the upper bound; for negative a, s2 is the lower bound.
-clamped_actions = np.zeros((nE, nE, nA), dtype=int)
-for s1, s2 in product(range(nE), range(nE)):
-    clamped_actions[s1, s2] = index(clamp(actions, -s2, s1))
+clamped_actions = np.zeros((nS, nA), dtype=int)
+for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
+    clamped_actions[s] = index(clamp(actions, -s2, s1))
 
 ################################################################################
 # Transition probability functions.
@@ -134,7 +126,7 @@ def prob_return(mu_return):
 
 def prob_location(direction, mu_request, mu_return):
     """
-    p[a, r, s, s'] = the probability of moving a cars, renting r cars and transitioning from state s to s' after cars have been returned.
+    p[s, a, s', r] = probability of transition to state s' with reward r, from state s and action a.
     """
     prob_mov = prob_move(direction)
     prob_req = prob_request(mu_request)
@@ -142,30 +134,69 @@ def prob_location(direction, mu_request, mu_return):
     prob = np.zeros((nA, nM, nE, nE))
     for a, r in product(range(nA), range(nM)):
         prob[a, r] = prob_mov[a] @ prob_req[r] @ prob_ret
-    assert np.isclose(prob.sum(axis=(1, 3)), 1).all()
+    prob = prob.transpose(2, 0, 3, 1)
+    assert np.isclose(prob.sum(axis=(2, 3)), 1).all()
     return prob
 
 
-def prob_daily():
-    """
-    p[s1, s2, a, r, s1', s2'] = the probability of moving a cars, renting r cars and transitioning from state (s1, s2) to (s1', s2') after cars have been returned.
-    """
-    prob_location_1 = prob_location(direction_1, mu_request_1, mu_return_1)
-    prob_location_2 = prob_location(direction_2, mu_request_2, mu_return_2)
-    prob = np.zeros((nE, nE, nA, nR, nE, nE))
-    for s1, s2, a in product(range(nE), range(nE), range(nA)):
-        m = clamped_actions[s1, s2, a]
-        for r1, r2 in rentals:
-            prob[s1, s2, a, r1 + r2] += prob_location_1[m, r1, s1].reshape((nE, 1)) * prob_location_2[m, r2, s2].reshape((1, nE))
-    return prob.transpose(0, 1, 2, 4, 5, 3).reshape((nS, nA, nS, nR))
+def model_location(direction, mu_request, mu_return):
+    P_tensor = prob_location(direction, mu_request, mu_return)
+    return {
+        s: {
+            a: [
+                (P_tensor[s, a, next, r], next, r)
+                for next, r in product(range(nE), range(nM))
+            ]
+            for a in range(nA)
+        }
+        for s in range(nE)
+    }
 
 
-def reward_state_action_rentals():
-    reward = np.zeros((nS, nA, nR))
+def prob_transition():
+    """
+    p[s, a, s'] = probability of transition to state s', from state s and action a.
+    """
+    prob_sas_1 = prob_location(direction_1, mu_request_1, mu_return_1).sum(axis=3).reshape((nE, nA, nE, 1))
+    prob_sas_2 = prob_location(direction_2, mu_request_2, mu_return_2).sum(axis=3).reshape((nE, nA, 1, nE))
+    prob_sas_12 = np.zeros((nS, nA, nE, nE))
     for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
-        for a, r in product(range(nA), range(nR)):
-            m = clamped_actions[s1, s2, a]
+        for a in range(nA):                         # An action can involve up to 5 moved cars,
+            m = clamped_actions[s, a]               # but only if there are enough cars to start with.
+            prob_sas_12[s, a] += prob_sas_1[s1, m] * prob_sas_2[s2, m]
+    prob = prob_sas_12.reshape((nS, nA, nS))
+    assert np.isclose(prob.sum(axis=2), 1).all()
+    return prob
+
+
+def immediate_reward():
+    """
+    R[s, a, r] = the immediate reward from renting r cars, from state s and action a. 
+    """
+    reward = np.zeros((nS, nA, nR))
+    for s, a in product(range(nS), range(nA)):
+        m = clamped_actions[s, a]
+        for r in range(nR):
             reward[s, a, r] = -abs(actions[a]) * cost + r * rent
+    return reward
+
+
+def expected_immediate_reward():
+    """
+    R[s, a] = the expected immediate reward, from state s and action a.
+    """
+    prob_sar_1 = prob_location(direction_1, mu_request_1, mu_return_1).sum(axis=2).reshape((nE, nA, nM, 1))
+    prob_sar_2 = prob_location(direction_2, mu_request_2, mu_return_2).sum(axis=2).reshape((nE, nA, 1, nM))
+    prob_sar_12 = np.zeros((nS, nA, nM, nM))
+    for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
+        for a in range(nA):                         # An action can involve up to 5 moved cars,
+            m = clamped_actions[s, a]               # but only if there are enough cars to start with.
+            prob_sar_12[s, a] += prob_sar_1[s1, m] * prob_sar_2[s2, m]   
+    prob_sar = np.zeros((nS, nA, nR))    
+    for r1, r2 in product(range(nM), range(nM)):    # An individual location can rent up to 25 cars,
+        if r1 + r2 < nR:                            # but both locations combined can rent up to 40 cars.
+            prob_sar[:, :, r1 + r2] += prob_sar_12[:, :, r1, r2]
+    reward = np.sum(prob_sar * immediate_reward(), axis=2)
     return reward
 
 
@@ -197,38 +228,22 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         """
         Initialize the state of the environment.
         """
-        # Equation (3.2) in Sutton & Barto (p.48):
-        # p(s', r|s, a) = probability of transition to state s' with reward r, from state s and action a.
-        P_tensor = prob_daily()
-
-        # Equation (3.3) in Sutton & Barto (p.48):
-        assert np.isclose(P_tensor.sum(axis=(2, 3)), 1).all()
-
         # Equation (3.4) in Sutton & Barto (p.49):
         # p(s'|s, a) = probability of transition to state s', from state s taking action a.
-        self.transition = P_tensor.sum(axis=3)
+        self.transition = prob_transition()
         assert np.isclose(self.transition.sum(axis=2), 1).all()
 
         # Equation (3.5) in Sutton & Barto (p.49):
         # r(s, a) = expected immediate reward from state s after action a.
-        immediate_reward = reward_state_action_rentals()
-        self.reward = np.sum(P_tensor.sum(axis=2) * immediate_reward, axis=2)
+        self.reward = expected_immediate_reward()
 
-        P = {
-            s: {
-                a: [
-                    (P_tensor[s, a, next, r], next, immediate_reward[s, a, r], False)
-                    for next, r in product(range(nS), range(nR))
-                ]
-                for a in range(nA)
-            }
-            for s in range(nS)
-        }
+        self.P1 = model_location(direction_1, mu_request_1, mu_return_1)
+        self.P2 = model_location(direction_2, mu_request_2, mu_return_2)
 
-        isd = np.full(nS, 1 / nS)
+        self.isd = np.full(nS, 1 / nS)
 
         # For continuing tasks, there is no terminal state.
         self.nSp = nS
 
-        super(JacksCarRentalEnv, self).__init__(nS, nA, P, isd)
+        # TODO write step()/reset() in terms of P1, P2 and isd
 

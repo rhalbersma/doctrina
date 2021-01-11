@@ -18,7 +18,13 @@ def register(id, entry_point, force=True):
     )
 
 
-register(
-    id='Bandit-v0',
-    entry_point='doctrina.envs.multi_armed_bandit:MultiArmedBanditEnv',
-)
+environments = [
+    ['multi_armed_bandit', 'MultiArmedBandit', 'v0'],
+    ['jacks_car_rental',   'JacksCarRental',   'v1']
+]
+
+for file, name, version in environments:
+    register(
+        id=f'{name}-{version}',
+        entry_point=f'doctrina.envs.{file}:{name}Env',
+    )
