@@ -180,8 +180,9 @@ def immediate_reward():
     reward = np.zeros((nS, nA, nR))
     for s, a in product(range(nS), range(nA)):
         m = clamped_actions[s, a]
+        d = actions[a] - actions[m]
         for r in range(nR):
-            reward[s, a, r] = -abs(actions[a]) * cost + r * rent
+            reward[s, a, r] = -(abs(actions[m]) + 0.001 * abs(d)) * cost + r * rent
     return reward
 
 
