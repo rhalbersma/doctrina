@@ -167,7 +167,7 @@ def prob_transition():
     for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
         for a in range(nA):                         # An action can involve up to 5 moved cars,
             m = clamped_actions[s, a]               # but only if there are enough cars to start with.
-            prob_sas_12[s, a] += prob_sas_1[s1, m] * prob_sas_2[s2, m]
+            prob_sas_12[s, a] = prob_sas_1[s1, m] * prob_sas_2[s2, m]
     prob = prob_sas_12.reshape((nS, nA, nS))
     assert np.isclose(prob.sum(axis=2), 1).all()
     return prob
@@ -196,7 +196,7 @@ def expected_immediate_reward():
     for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
         for a in range(nA):                         # An action can involve up to 5 moved cars,
             m = clamped_actions[s, a]               # but only if there are enough cars to start with.
-            prob_sar_12[s, a] += prob_sar_1[s1, m] * prob_sar_2[s2, m]   
+            prob_sar_12[s, a] = prob_sar_1[s1, m] * prob_sar_2[s2, m]   
     prob_sar = np.zeros((nS, nA, nR))    
     for r1, r2 in product(range(nM), range(nM)):    # An individual location can rent up to 25 cars,
         if r1 + r2 < nR:                            # but both locations combined can rent up to 40 cars.
