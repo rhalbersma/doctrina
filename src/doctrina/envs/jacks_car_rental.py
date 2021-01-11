@@ -131,15 +131,19 @@ def prob_location(direction, mu_request, mu_return):
     prob_mov = prob_move(direction)
     prob_req = prob_request(mu_request)
     prob_ret = prob_return(mu_return)
-    prob = np.zeros((nA, nM, nE, nE))
+    prob = np.zeros((nA, nM, nE, nE))       # The computation is most natural in this index order.
     for a, r in product(range(nA), range(nM)):
         prob[a, r] = prob_mov[a] @ prob_req[r] @ prob_ret
-    prob = prob.transpose(2, 0, 3, 1)
+    prob = prob.transpose(2, 0, 3, 1)    
+    assert prob.shape == (nE, nA, nE, nM)   # The result will be used in this index order.
     assert np.isclose(prob.sum(axis=(2, 3)), 1).all()
     return prob
 
 
 def model_location(direction, mu_request, mu_return):
+    """
+    P[s][a] = a nested dictionary of lists of (prob, next, rentals) tuples, from state s and action a.
+    """
     P_tensor = prob_location(direction, mu_request, mu_return)
     return {
         s: {
@@ -195,7 +199,7 @@ def expected_immediate_reward():
     prob_sar = np.zeros((nS, nA, nR))    
     for r1, r2 in product(range(nM), range(nM)):    # An individual location can rent up to 25 cars,
         if r1 + r2 < nR:                            # but both locations combined can rent up to 40 cars.
-            prob_sar[:, :, r1 + r2] += prob_sar_12[:, :, r1, r2]
+            prob_sar[..., r1 + r2] += prob_sar_12[..., r1, r2]
     reward = np.sum(prob_sar * immediate_reward(), axis=2)
     return reward
 
