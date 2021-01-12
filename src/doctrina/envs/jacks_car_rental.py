@@ -201,17 +201,17 @@ def immediate_reward():
 ################################################################################
 
 
-def model_location(direction, mu_request, mu_return):
+def step_location(direction, mu_request, mu_return):
     """
     P[s][a] = a nested dictionary of lists of (prob, next, rentals) tuples, from state s and action a.
     """
-    P_tensor = prob_location(direction, mu_request, mu_return)
+    prob = prob_location(direction, mu_request, mu_return)
     P = {
         s: {
             a: [
-                (P_tensor[s, a, next, r], next, r)
+                (prob[s, a, next, r], next, r)
                 for next, r in product(range(nE), range(nM))
-                if P_tensor[s, a, next, r] > 0  # All probabilities are non-zero, but we keep this for generality's sake.
+                if prob[s, a, next, r] > 0  # All probabilities are non-zero, but we keep this for generality's sake.
             ]
             for a in range(nA)
         }
@@ -220,7 +220,7 @@ def model_location(direction, mu_request, mu_return):
     return P
 
 
-def model_cdf(P):
+def step_cdf(P):
     cdf = {
         s: {
             a: np.array([
@@ -274,18 +274,18 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         self.reward_range = (np.min(self.reward), np.max(self.reward))
 
         self.P = (
-            model_location(direction_1, mu_request_1, mu_return_1),
-            model_location(direction_2, mu_request_2, mu_return_2)
+            step_location(direction_1, mu_request_1, mu_return_1),
+            step_location(direction_2, mu_request_2, mu_return_2)
         )
         self.isd = np.full(nS, 1 / nS)
 
         # For better sampling performance, we precompute the cumulative distributions
         # for both the P dictionaries and the initial state distribution.
-        self.model_cdf = (
-            model_cdf(self.P[0]),
-            model_cdf(self.P[1])
+        self.step_cdf = (
+            step_cdf(self.P[0]),
+            step_cdf(self.P[1])
         )
-        self.start_cdf = self.isd.cumsum()
+        self.reset_cdf = self.isd.cumsum()
 
         self.observation_space = spaces.Discrete(nS)
         self.action_space = spaces.Discrete(nA)
@@ -298,12 +298,12 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         self.seed()
         self.reset()
 
-    def _sample_from_categorical_cdf(self, cdf):
+    def _sample_from_categorical(self, cdf):
         return int((cdf > self.np_random.rand()).argmax())
 
     def _step_location(self, a, s, loc):
-        cdf = self.model_cdf[loc][s][a]
-        idx = self._sample_from_categorical_cdf(cdf)
+        cdf = self.step_cdf[loc][s][a]
+        idx = self._sample_from_categorical(cdf)
         return self.P[loc][s][a][idx]
 
     def step(self, a):
@@ -325,7 +325,7 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         return next, reward, False, { 'prob': prob }
 
     def reset(self):
-        self.s = self._sample_from_categorical_cdf(self.start_cdf)
+        self.s = self._sample_from_categorical(self.reset_cdf)
         self.lastaction = None
         return self.s
 
