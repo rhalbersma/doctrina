@@ -17,10 +17,10 @@ from scipy.stats import poisson
 ################################################################################
 
 # If Jack has a car available, he rents it out and is credited $10 by the national company.
-rent = 10
+rental_price = 10
 
 # [...] Jack can move them between the two locations overnight, at a cost of $2 per car moved.
-cost =  2
+moving_fee =  2
 
 # Suppose lambda is 3 and 4 for rental requests at the first and second locations and 3 and 2 for returns.
 mu_request_1 = 3
@@ -46,6 +46,19 @@ nA = np.size(actions)
 nR = 2 * max_evening + 1
 
 ################################################################################
+# Environment extension parameters.
+################################################################################
+
+# One of Jack’s employees [...] is happy to shuttle one car to the second location for free. 
+max_free_move_12 = 1
+
+# If more than 10 cars are kept overnight at a location [...]
+max_free_parking = 10
+
+# [...] then an additional cost of $4 must be incurred [...]
+parking_fee = 4
+
+################################################################################
 # Auxiliary functions.
 ################################################################################
 
@@ -60,11 +73,16 @@ def index(action):
     return action + max_movable
 
 
-# clamped_actions[s1, s2, a] = clamped actions when moving a cars from s1 to s2.
+# clamped_actions[(s1, s2), a] = clamped actions when moving a cars from s1 to s2.
 # For positive a, s1 is the upper bound; for negative a, s2 is the lower bound.
 clamped_actions = np.zeros((nS, nA), dtype=int)
 for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
     clamped_actions[s] = index(clamp(actions, -s2, s1))
+
+# parking_lots[(s1, s2)] is the number of required parking lots in state (s1, s2).
+parking_lots = np.zeros(nS)
+for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
+    parking_lots[s] = (s1 > max_free_parking) + (s2 > max_free_parking)
 
 ################################################################################
 # Transition probability functions.
@@ -183,16 +201,28 @@ def prob_rentals():
     return prob
 
 
-def immediate_reward():
+def immediate_reward(is_extended=False, epsilon=.01):
     """
     R[s, a, r] = the immediate reward from renting r cars, from state s and action a.
+
+    Note:
+        We use a regularization parameter epsilon to charge $.01 per requested but unavailable car.
+        This will force such impossible actions to have a lower reward than the possible actions.
     """
     reward = np.zeros((nS, nA, nR))
-    for s, a in product(range(nS), range(nA)):
-        m = clamped_actions[s, a]
-        d = actions[a] - actions[m]
-        for r in range(nR):
-            reward[s, a, r] = -(abs(actions[m]) + 0.001 * abs(d)) * cost + r * rent
+    for s in range(nS):
+        reward[s] -= parking_fee * (parking_lots[s] if is_extended else 0)
+        for a in range(nA):
+            i = clamped_actions[s, a]   # The index of the number of movable cars.
+            m = abs(actions[i])         # The number of moved cars.
+            u = abs(actions[a]) - m     # Requested but unavailable cars.
+            assert u >= 0
+            if is_extended and actions[i] >= max_free_move_12:
+                m -= max_free_move_12   # The first car moved from location 1 to location 2 is free.
+                assert m >= 0
+            reward[s, a] -= moving_fee * m + epsilon * u
+            for r in range(nR):
+                reward[s, a, r] += rental_price * r
     return reward
 
 
@@ -258,7 +288,7 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         There is an unbounded continuous reward range.
     """
 
-    def __init__(self):
+    def __init__(self, is_extended=False):
         """
         Initialize the state of the environment.
         """
@@ -269,7 +299,7 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
 
         # Equation (3.5) in Sutton & Barto (p.49):
         # r(s, a) = expected immediate reward from state s after action a.
-        self.immediate_reward = immediate_reward()
+        self.immediate_reward = immediate_reward(is_extended)
         self.reward = np.sum(prob_rentals() * self.immediate_reward, axis=2)
         self.reward_range = (np.min(self.reward), np.max(self.reward))
 
