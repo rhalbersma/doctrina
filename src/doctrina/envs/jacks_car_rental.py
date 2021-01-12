@@ -68,6 +68,9 @@ for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
 
 ################################################################################
 # Transition probability functions.
+#
+#         move          request            return
+# evening ----> morning -------> afternoon ------> evening
 ################################################################################
 
 
@@ -83,7 +86,8 @@ def prob_move(direction):
     for evening in range(nE):
         moved = clamp(direction * actions, -max_movable, min(evening, max_movable))
         for a in range(nA):
-            prob[a, evening, evening - moved[a]] = 1
+            morning = evening - moved[a]
+            prob[a, evening, morning] = 1
     assert np.isclose(prob.sum(axis=2), 1).all()
     return prob
 
@@ -99,9 +103,11 @@ def prob_request(mu_request):
     prob = np.zeros((nM, nM, nM))
     for morning in range(nM):
         for rented in range(morning + 1):
-            prob[rented, morning, morning - rented] = poisson.pmf(rented, mu_request)
+            afternoon = morning - rented
+            prob[rented, morning, afternoon] = poisson.pmf(rented, mu_request)
         # Excess requests beyond what's available are captured by the survival function (== 1 - CDF)
-        prob[morning, morning, 0] += poisson.sf(morning, mu_request)
+        assert afternoon == 0
+        prob[morning, morning, afternoon] += poisson.sf(morning, mu_request)
     assert np.isclose(prob.sum(axis=(0, 2)), 1).all()
     return prob
 
@@ -117,9 +123,11 @@ def prob_return(mu_return):
     prob = np.zeros((nM, nE))
     for afternoon in range(nM):
         for returned in range(nE - afternoon):
-            prob[afternoon, afternoon + returned] = poisson.pmf(returned, mu_return)
+            evening = afternoon + returned
+            prob[afternoon, evening] = poisson.pmf(returned, mu_return)
         # Excess returns beyond what can be kept are captured by the survival function (== 1 - CDF)
-        prob[afternoon, max_evening] += poisson.sf(max_evening - afternoon, mu_return)
+        assert evening == max_evening
+        prob[afternoon, evening] += poisson.sf(evening - afternoon, mu_return)
     assert np.isclose(prob.sum(axis=1), 1).all()
     return prob
 
@@ -134,27 +142,10 @@ def prob_location(direction, mu_request, mu_return):
     prob = np.zeros((nA, nM, nE, nE))       # The computation is most natural in this index order.
     for a, r in product(range(nA), range(nM)):
         prob[a, r] = prob_mov[a] @ prob_req[r] @ prob_ret
-    prob = prob.transpose(2, 0, 3, 1)    
+    prob = prob.transpose(2, 0, 3, 1)
     assert prob.shape == (nE, nA, nE, nM)   # The result will be used in this index order.
     assert np.isclose(prob.sum(axis=(2, 3)), 1).all()
     return prob
-
-
-def model_location(direction, mu_request, mu_return):
-    """
-    P[s][a] = a nested dictionary of lists of (prob, next, rentals) tuples, from state s and action a.
-    """
-    P_tensor = prob_location(direction, mu_request, mu_return)
-    return {
-        s: {
-            a: [
-                (P_tensor[s, a, next, r], next, r)
-                for next, r in product(range(nE), range(nM))
-            ]
-            for a in range(nA)
-        }
-        for s in range(nE)
-    }
 
 
 def prob_transition():
@@ -173,9 +164,28 @@ def prob_transition():
     return prob
 
 
+def prob_rentals():
+    """
+    prob[s, a, r] = the probability of r rentals, from state s and action a.
+    """
+    prob_sar_1 = prob_location(direction_1, mu_request_1, mu_return_1).sum(axis=2).reshape((nE, nA, nM, 1))
+    prob_sar_2 = prob_location(direction_2, mu_request_2, mu_return_2).sum(axis=2).reshape((nE, nA, 1, nM))
+    prob_sar_12 = np.zeros((nS, nA, nM, nM))
+    for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
+        for a in range(nA):                         # An action can involve up to 5 moved cars,
+            m = clamped_actions[s, a]               # but only if there are enough cars to start with.
+            prob_sar_12[s, a] = prob_sar_1[s1, m] * prob_sar_2[s2, m]
+    prob = np.zeros((nS, nA, nR))
+    for r1, r2 in product(range(nM), range(nM)):    # An individual location can rent up to 25 cars,
+        if r1 + r2 < nR:                            # but both locations combined can rent up to 40 cars.
+            prob[..., r1 + r2] += prob_sar_12[..., r1, r2]
+    assert np.isclose(prob.sum(axis=2), 1).all()
+    return prob
+
+
 def immediate_reward():
     """
-    R[s, a, r] = the immediate reward from renting r cars, from state s and action a. 
+    R[s, a, r] = the immediate reward from renting r cars, from state s and action a.
     """
     reward = np.zeros((nS, nA, nR))
     for s, a in product(range(nS), range(nA)):
@@ -186,23 +196,42 @@ def immediate_reward():
     return reward
 
 
-def expected_immediate_reward():
+################################################################################
+# Sparse representation of the environment's model.
+################################################################################
+
+
+def model_location(direction, mu_request, mu_return):
     """
-    R[s, a] = the expected immediate reward, from state s and action a.
+    P[s][a] = a nested dictionary of lists of (prob, next, rentals) tuples, from state s and action a.
     """
-    prob_sar_1 = prob_location(direction_1, mu_request_1, mu_return_1).sum(axis=2).reshape((nE, nA, nM, 1))
-    prob_sar_2 = prob_location(direction_2, mu_request_2, mu_return_2).sum(axis=2).reshape((nE, nA, 1, nM))
-    prob_sar_12 = np.zeros((nS, nA, nM, nM))
-    for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
-        for a in range(nA):                         # An action can involve up to 5 moved cars,
-            m = clamped_actions[s, a]               # but only if there are enough cars to start with.
-            prob_sar_12[s, a] = prob_sar_1[s1, m] * prob_sar_2[s2, m]   
-    prob_sar = np.zeros((nS, nA, nR))    
-    for r1, r2 in product(range(nM), range(nM)):    # An individual location can rent up to 25 cars,
-        if r1 + r2 < nR:                            # but both locations combined can rent up to 40 cars.
-            prob_sar[..., r1 + r2] += prob_sar_12[..., r1, r2]
-    reward = np.sum(prob_sar * immediate_reward(), axis=2)
-    return reward
+    P_tensor = prob_location(direction, mu_request, mu_return)
+    P = {
+        s: {
+            a: [
+                (P_tensor[s, a, next, r], next, r)
+                for next, r in product(range(nE), range(nM))
+                if P_tensor[s, a, next, r] > 0  # All probabilities are non-zero, but we keep this for generality's sake.
+            ]
+            for a in range(nA)
+        }
+        for s in range(nE)
+    }
+    return P
+
+
+def model_cdf(P):
+    cdf = {
+        s: {
+            a: np.array([
+                t[0]
+                for t in P[s][a]
+            ]).cumsum()
+            for a in P[s].keys()
+        }
+        for s in P.keys()
+    }
+    return cdf
 
 
 ################################################################################
@@ -240,15 +269,75 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
 
         # Equation (3.5) in Sutton & Barto (p.49):
         # r(s, a) = expected immediate reward from state s after action a.
-        self.reward = expected_immediate_reward()
+        self.immediate_reward = immediate_reward()
+        self.reward = np.sum(prob_rentals() * self.immediate_reward, axis=2)
+        self.reward_range = (np.min(self.reward), np.max(self.reward))
 
-        self.P1 = model_location(direction_1, mu_request_1, mu_return_1)
-        self.P2 = model_location(direction_2, mu_request_2, mu_return_2)
-
+        self.P = (
+            model_location(direction_1, mu_request_1, mu_return_1),
+            model_location(direction_2, mu_request_2, mu_return_2)
+        )
         self.isd = np.full(nS, 1 / nS)
 
-        # For continuing tasks, there is no terminal state.
-        self.nSp = nS
+        # For better sampling performance, we precompute the cumulative distributions
+        # for both the P dictionaries and the initial state distribution.
+        self.model_cdf = (
+            model_cdf(self.P[0]),
+            model_cdf(self.P[1])
+        )
+        self.start_cdf = self.isd.cumsum()
 
-        # TODO write step()/reset() in terms of P1, P2 and isd
+        self.observation_space = spaces.Discrete(nS)
+        self.action_space = spaces.Discrete(nA)
+        self.nS = nS
+        self.nA = nA
+
+        # For continuing tasks, there is no terminal state.
+        self.nSp = self.nS
+
+        self.seed()
+        self.reset()
+
+    def _sample_from_categorical_cdf(self, cdf):
+        return int((cdf > self.np_random.rand()).argmax())
+
+    def _step_location(self, a, s, loc):
+        cdf = self.model_cdf[loc][s][a]
+        idx = self._sample_from_categorical_cdf(cdf)
+        return self.P[loc][s][a][idx]
+
+    def step(self, a):
+        m = clamped_actions[self.s, a]
+        s = divmod(self.s, nE)
+        prob, next, rentals = tuple(
+            list(t)
+            for t in zip(*[
+                self._step_location(m, s[i], i)
+                for i in range(2)
+            ])
+        )
+        prob = np.prod(prob)
+        next = np.array(next) @ np.array([nE, 1])
+        rentals = np.sum(rentals)
+        reward = self.immediate_reward[self.s, m, rentals]
+        self.s = next
+        self.lastaction = m
+        return next, reward, False, { 'prob': prob }
+
+    def reset(self):
+        self.s = self._sample_from_categorical_cdf(self.start_cdf)
+        self.lastaction = None
+        return self.s
+
+    def explore(self, start):
+        """
+        Explore a specific starting state of the environment.
+
+        Notes:
+            This is an extension of the OpenAI Gym interface.
+            Monte Carlo Exploring Starts should use this method instead of reset().
+        """
+        self.s = start
+        self.lastaction = None
+        return self.s
 
