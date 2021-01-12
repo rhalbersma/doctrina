@@ -69,8 +69,8 @@ for s, (s1, s2) in enumerate(product(range(nE), range(nE))):
 ################################################################################
 # Transition probability functions.
 #
-#         move          request            return
-# evening ----> morning -------> afternoon ------> evening
+# action:           [move]            [request]              [return]
+# state:  [evening] ------> [morning] ---------> [afternoon] --------> [evening]
 ################################################################################
 
 
