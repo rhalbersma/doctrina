@@ -309,16 +309,11 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
     def step(self, a):
         m = clamped_actions[self.s, a]
         s = divmod(self.s, nE)
-        prob, next, rentals = tuple(
-            list(t)
-            for t in zip(*[
-                self._step_location(m, s[i], i)
-                for i in range(2)
-            ])
-        )
-        prob = np.prod(prob)
-        next = np.array(next) @ np.array([nE, 1])
-        rentals = np.sum(rentals)
+        prob_1, next_1, rentals_1 = self._step_location(m, s[0], 0)
+        prob_2, next_2, rentals_2 = self._step_location(m, s[1], 1)
+        prob = prob_1 * prob_2
+        next = next_1 * nE + next_2
+        rentals = rentals_1 + rentals_2
         reward = self.immediate_reward[self.s, m, rentals]
         self.s = next
         self.lastaction = m
