@@ -17,7 +17,7 @@ setup(
     install_requires=[
         'gym', 'ipykernel', 'jinja2', 'matplotlib', 'numpy', 'pandas', 'plotnine', 'pylint', 'scipy', 'seaborn', 'setuptools', 'tqdm', 'wheel',
         'gym_blackjack_v1 @ git+https://github.com/rhalbersma/gym-blackjack-v1.git#egg=gym_blackjack_v1',
-        'gym_jcr @ git+https://github.com/gsverhoeven/gym_jcr.git#egg=gym_jcr'
+        'gym_jcr @ git+https://github.com/rhalbersma/gym_jcr.git#egg=gym_jcr'
     ],
     python_requires='>=3.6',
     classifiers=[

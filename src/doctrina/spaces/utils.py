@@ -22,6 +22,3 @@ def size(space):
     return functools.reduce(operator.mul, shape(space))
 
 
-def state_table(table, env):
-    return table.reshape(env.observation_shape)
-

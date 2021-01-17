@@ -6,8 +6,9 @@
 import numpy as np
 
 
-def one_hot_encode(arr, size):
-    one_hot = np.zeros((arr.size, size))
-    one_hot[np.arange(arr.size), arr] = 1
-    return one_hot
+def one_hot_encode(policy_deter, size=None):
+    size = policy_deter.max() + 1 if size is None else size
+    policy_stoch = np.zeros((policy_deter.size, size))
+    policy_stoch[np.arange(policy_deter.size), policy_deter] = 1
+    return policy_stoch
 

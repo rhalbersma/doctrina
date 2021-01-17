@@ -5,7 +5,7 @@
 
 import numpy as np
 import pandas as pd
-import scipy.special as sps
+from scipy.special import softmax
 from tqdm import tqdm
 
 from doctrina import spaces
@@ -106,7 +106,7 @@ def Q_control_grad(envs, nT, alpha=0.1, Q0=0, tau=1, baseline=True):
             N[s, a] += 1
             Q[s] += alpha * (r - R[s] * baseline) * (id[a] - policy[s])
             R[s] += (r - R[s]) / (t + 1)
-            policy[s] = sps.softmax(Q[s] / tau)
+            policy[s] = softmax(Q[s] / tau)
     return policy, Q, N, R, a_hist, r_hist
 
 

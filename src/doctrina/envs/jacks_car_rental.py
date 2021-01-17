@@ -317,6 +317,7 @@ class JacksCarRentalEnv(discrete.DiscreteEnv):
         )
         self.reset_cdf = self.isd.cumsum()
 
+        self.observation_shape = (nE, nE)
         self.observation_space = spaces.Discrete(nS)
         self.action_space = spaces.Discrete(nA)
         self.nS = nS
