@@ -18,11 +18,12 @@ def policy_init_stoch(env):
     return np.full((env.nS, env.nA), 1 / env.nA)
 
 
-def policy_init_deter(env):
-    return np.zeros(env.nS, dtype=int)
+def policy_init_deter(env, fill_value=0):
+    return np.full(env.nS, fill_value, dtype=int)
 
 
 # Dispatcher to the various policy initialization algorithms.
+
 
 def dispatch_policy_init(format):
     return {
@@ -41,6 +42,7 @@ def policy_init(env, format='stoch'):
 ################################################################################
 
 # Asynchronous / in-place (Gauss-Seidel-style) iterative approach.
+
 
 def V_policy_eval_stoch_async(env, policy, gamma=1., V0=None, tol=1e-8, maxiter=None):
     P, R = env.transition, env.reward
@@ -108,6 +110,7 @@ def Q_policy_eval_deter_async(env, policy, gamma=1., Q0=None, tol=1e-8, maxiter=
 
 # Synchronous (Jacobi-style) iterative approach.
 
+
 def V_policy_eval_stoch_sync(env, policy, gamma=1., V0=None, tol=1e-8, maxiter=None):
     P, R = env.transition, env.reward
     V = np.zeros(env.nS) if V0 is None else V0.copy()
@@ -166,6 +169,7 @@ def Q_policy_eval_deter_sync(env, policy, gamma=1., Q0=None, tol=1e-8, maxiter=N
 
 # Direct matrix inversion of the Bellman equation.
 
+
 def V_policy_eval_stoch_solve(env, policy, gamma=1., **kwargs):
     P, R = env.transition, env.reward
     V = np.linalg.solve(np.identity(env.nS) - gamma * np.sum(policy[..., None] * P, axis=1), np.sum(policy * R, axis=1))
@@ -190,6 +194,7 @@ def Q_policy_eval_deter_solve(env, policy, gamma=1., **kwargs):
 
 
 # Dispatchers to the various policy evaluation algorithms.
+
 
 def dispatch_V_policy_eval(format, method):
     return {
@@ -243,6 +248,7 @@ def V_from_Q_deter(policy, Q):
 
 # Dispatcher for transformations between state value and state-actions value functions.
 
+
 def dispatch_V_from_Q(format):
     return {
         'stoch': V_from_Q_stoch,
@@ -261,17 +267,17 @@ def V_from_Q(policy, Q, format='stoch'):
 
 
 def Q_policy_impr_stoch(Q):
-    policy = np.isclose(Q, Q.max(axis=1, keepdims=True)).astype(float)
-    return policy / policy.sum(axis=1, keepdims=True)
+    policy = np.isclose(Q, Q.max(axis=-1, keepdims=True)).astype(float)
+    return policy / policy.sum(axis=-1, keepdims=True)
+
+
+def Q_policy_impr_deter(Q):
+    return np.argmax(Q, axis=-1)
 
 
 def V_policy_impr_stoch(env, V, gamma=1.):
     Q = Q_from_V(env, V, gamma)
     return Q_policy_impr_stoch(Q)
-
-
-def Q_policy_impr_deter(Q):
-    return np.argmax(Q, axis=1)
 
 
 def V_policy_impr_deter(env, V, gamma=1.):
@@ -280,6 +286,7 @@ def V_policy_impr_deter(env, V, gamma=1.):
 
 
 # Dispatchers to the various policy improvement algorithms.
+
 
 def dispatch_V_policy_impr(format):
     return {
@@ -302,7 +309,7 @@ def V_policy_impr(env, V, gamma=1., format='stoch'):
 
 def Q_policy_impr(env, Q, format='stoch'):
     impr = dispatch_Q_policy_impr(format)
-    return impr(env, Q)
+    return impr(Q)
 
 
 ################################################################################
@@ -407,6 +414,7 @@ def Q_value_update_sync(env, Q, gamma=1.):
 
 
 # Dispatchers to the various update algorithms.
+
 
 def dispatch_V_value_update(method):
     return {
