@@ -84,7 +84,7 @@ def Q_policy_eval_stoch_async(env, policy, gamma=1., Q0=None, tol=1e-8, maxiter=
         delta = 0.
         for s, a in product(range(env.nS), range(env.nA)):
             q = Q[s, a]
-            Q[s, a] = R[s, a] + gamma * P[s, a] @ np.sum(policy * Q, axis=1)
+            Q[s, a] = R[s, a] + gamma * P[s, a] @ np.sum(policy * Q, axis=-1)
             delta = np.maximum(delta, np.abs(q - Q[s, a]))
         iter += 1
         if (delta < tol) or (maxiter and iter >= maxiter):
@@ -117,7 +117,7 @@ def V_policy_eval_stoch_sync(env, policy, gamma=1., V0=None, tol=1e-8, maxiter=N
     iter = 0
     while True:
         v = V
-        V = np.sum(policy * (R + gamma * P @ V), axis=1)
+        V = np.sum(policy * (R + gamma * P @ V), axis=-1)
         delta = np.max(np.abs(v - V))
         iter += 1
         if (delta < tol) or (maxiter and iter >= maxiter):
@@ -145,7 +145,7 @@ def Q_policy_eval_stoch_sync(env, policy, gamma=1., Q0=None, tol=1e-8, maxiter=N
     iter = 0
     while True:
         q = Q
-        Q = R + gamma * P @ np.sum(policy * Q, axis=1)
+        Q = R + gamma * P @ np.sum(policy * Q, axis=-1)
         delta = np.max(np.abs(q - Q))
         iter += 1
         if (delta < tol) or (maxiter and iter >= maxiter):
@@ -172,7 +172,7 @@ def Q_policy_eval_deter_sync(env, policy, gamma=1., Q0=None, tol=1e-8, maxiter=N
 
 def V_policy_eval_stoch_solve(env, policy, gamma=1., **kwargs):
     P, R = env.transition, env.reward
-    V = np.linalg.solve(np.identity(env.nS) - gamma * np.sum(policy[..., None] * P, axis=1), np.sum(policy * R, axis=1))
+    V = np.linalg.solve(np.identity(env.nS) - gamma * np.sum(policy[..., None] * P, axis=1), np.sum(policy * R, axis=-1))
     return V, 0., 1
 
 
@@ -239,7 +239,7 @@ def Q_from_V(env, V, gamma=1.):
 
 
 def V_from_Q_stoch(policy, Q):
-    return np.sum(policy * Q, axis=1)
+    return np.sum(policy * Q, axis=-1)
 
 
 def V_from_Q_deter(policy, Q):
@@ -318,8 +318,8 @@ def Q_policy_impr(env, Q, format='stoch'):
 
 
 def Q_policy_cmp(policy0, policy1, Q, format='stoch'):
-    value = dispatch_V_from_Q(format)    
-    return np.isclose(value(policy0, Q), value(policy1, Q)).all()
+    trans = dispatch_V_from_Q(format)    
+    return np.isclose(trans(policy0, Q), trans(policy1, Q)).all()
 
 
 def V_policy_cmp(policy0, policy1, env, V, gamma=1., format='stoch'):
@@ -392,7 +392,7 @@ def Q_value_update_async(env, Q, gamma=1.):
     delta = 0.
     for s, a in product(range(env.nS), range(env.nA)):
         q = Q[s, a]
-        Q[s, a] = R[s, a] + gamma * P[s, a] @ np.max(Q, axis=1)
+        Q[s, a] = R[s, a] + gamma * P[s, a] @ np.max(Q, axis=-1)
         delta = np.maximum(delta, np.abs(q - Q[s, a]))
     return Q, delta
 
@@ -400,7 +400,7 @@ def Q_value_update_async(env, Q, gamma=1.):
 def V_value_update_sync(env, V, gamma=1.):
     P, R = env.transition, env.reward
     v = V
-    V = np.max(R + gamma * P @ V, axis=1)
+    V = np.max(R + gamma * P @ V, axis=-1)
     delta = np.max(np.abs(v - V))
     return V, delta
 
@@ -408,7 +408,7 @@ def V_value_update_sync(env, V, gamma=1.):
 def Q_value_update_sync(env, Q, gamma=1.):
     P, R = env.transition, env.reward
     q = Q
-    Q = R + gamma * P @ np.max(Q, axis=1)
+    Q = R + gamma * P @ np.max(Q, axis=-1)
     delta = np.max(np.abs(q - Q))
     return Q, delta
 

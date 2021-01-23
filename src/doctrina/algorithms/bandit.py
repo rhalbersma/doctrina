@@ -12,32 +12,33 @@ from doctrina import spaces
 
 
 ################################################################################
-# Action selections.
+# Action selection: policy -> action.
 ################################################################################
 
 
-def argmax_random(policy):
+def select_argmax(policy):
+    # https://stackoverflow.com/a/42071648/
     return np.random.choice(np.flatnonzero(policy == policy.max()))
 
 
-def epsilon_greedy(Q, epsilon):
+def select_epsilon_greedy(policy, epsilon):
     if epsilon == 0 or np.random.rand(1) > epsilon:
-        return argmax_random(Q)
+        return select_argmax(policy)
     else:
-        return np.random.randint(np.size(Q))
+        return np.random.randint(np.size(policy))
 
 
-def sample(policy):
+def select_sample(policy):
     return np.random.choice(np.arange(np.size(policy)), p=policy)
 
 
 ################################################################################
-# Policy updates.
+# Policy improvement.
 ################################################################################
 
 
-def upper_confidence_bound(Q, N, t, c, N0=1e-6):
-    # We use 0-based time indexing, so add 1 inside log here.
+def upper_confidence_bound(Q, N, t, c=2, N0=1e-6):
+    # We use 0-based time indexing, so add 1 inside logarithm here.
     return Q + c * np.sqrt(np.log(t + 1) / (N + N0))
 
 
@@ -55,7 +56,7 @@ def Q_control_eps(envs, nT, epsilon=0.1, Q0=0, alpha=0):
     r_hist = np.full((nS, nT), None, dtype=float)
     for s, env in enumerate(tqdm(envs)):
         for t in range(nT):
-            a = epsilon_greedy(Q[s], epsilon)
+            a = select_epsilon_greedy(Q[s], epsilon)
             _, r, _, _ = env.step(a)
             a_hist[s, t] = a
             r_hist[s, t] = r
@@ -76,7 +77,7 @@ def Q_control_ucb(envs, nT, c=2, Q0=0, alpha=0):
     r_hist = np.full((nS, nT), None, dtype=float)
     for s, env in enumerate(tqdm(envs)):
         for t in range(nT):
-            a = argmax_random(policy[s])
+            a = select_argmax(policy[s])
             _, r, _, _ = env.step(a)
             a_hist[s, t] = a
             r_hist[s, t] = r
@@ -99,7 +100,7 @@ def Q_control_grad(envs, nT, alpha=0.1, Q0=0, tau=1, baseline=True):
     id = np.identity(nA)
     for s, env in enumerate(tqdm(envs)):
         for t in range(nT):
-            a = sample(policy[s])
+            a = select_sample(policy[s])
             _, r, _, _ = env.step(a)
             a_hist[s, t] = a
             r_hist[s, t] = r
