@@ -4,11 +4,19 @@
 #          http://www.boost.org/LICENSE_1_0.txt)
 
 import numpy as np
+from numpy.random import default_rng
 import pandas as pd
 from scipy.special import softmax
 from tqdm import tqdm
 
 from doctrina import spaces
+
+rng = default_rng()
+
+
+def upper_confidence_bound(Q, N, t, c=2, N0=1e-6):
+    # We use 0-based time indexing, so we add 1 inside the logarithm here.
+    return Q + c * np.sqrt(np.log(t + 1) / (N + N0))
 
 
 ################################################################################
@@ -16,20 +24,31 @@ from doctrina import spaces
 ################################################################################
 
 
-def select_argmax(policy):
-    # https://stackoverflow.com/a/42071648/
-    return np.random.choice(np.flatnonzero(policy == policy.max()))
+def select_random_choice(policy):
+    return rng.choice(np.arange(policy.size), p=policy)
+
+
+def select_random_uniform(policy):
+    return rng.integers(policy.size)
+
+
+def select_greedy_argmax(policy):
+    return policy.argmax()
+
+
+def select_greedy_equal(policy):
+    return rng.choice(np.flatnonzero(np.equal(policy, policy.max())))
+
+
+def select_greedy_isclose(policy):
+    return rng.choice(np.flatnonzero(np.isclose(policy, policy.max())))
 
 
 def select_epsilon_greedy(policy, epsilon):
-    if epsilon == 0 or np.random.rand(1) > epsilon:
-        return select_argmax(policy)
+    if epsilon and rng.random() < epsilon:
+        return select_random_uniform(policy)
     else:
-        return np.random.randint(np.size(policy))
-
-
-def select_sample(policy):
-    return np.random.choice(np.arange(np.size(policy)), p=policy)
+        return select_greedy_equal(policy)
 
 
 ################################################################################
@@ -37,9 +56,20 @@ def select_sample(policy):
 ################################################################################
 
 
-def upper_confidence_bound(Q, N, t, c=2, N0=1e-6):
-    # We use 0-based time indexing, so add 1 inside logarithm here.
-    return Q + c * np.sqrt(np.log(t + 1) / (N + N0))
+def greedy(x):
+    policy = np.isclose(x, x.max()).astype(float)
+    policy /= policy.sum()
+    return policy
+ 
+
+def epsilon_soft(policy, epsilon):
+    policy *= 1 - epsilon
+    policy += epsilon / policy.size
+    return policy
+
+
+def epsilon_greedy(x, epsilon):
+    return epsilon_soft(greedy(x), epsilon)
 
 
 ################################################################################
@@ -47,68 +77,48 @@ def upper_confidence_bound(Q, N, t, c=2, N0=1e-6):
 ################################################################################
 
 
-def Q_control_eps(envs, nT, epsilon=0.1, Q0=0, alpha=0):
-    nS, nA = np.size(envs), spaces.size(envs[0].action_space)
-    Q = np.full((nS, nA), Q0, dtype=float)
-    N = np.zeros((nS, nA), dtype=int)
-    R = np.zeros(nS)
-    a_hist = np.full((nS, nT),   -1, dtype=int)
-    r_hist = np.full((nS, nT), None, dtype=float)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(nT):
+def Q_control_eps(env, num_steps, alpha=0, epsilon=0.1, Q0=0):
+    Q = np.full((env.nS, env.nA), Q0, dtype=float)
+    N = np.zeros((env.nS, env.nA), dtype=int)
+    for s in tqdm(range(env.nS)):
+        env.explore(s)
+        for _ in range(num_steps):
             a = select_epsilon_greedy(Q[s], epsilon)
             _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
             N[s, a] += 1
-            step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += step_size * (r - Q[s, a])
-            R[s] += (r - R[s]) / (t + 1)
-    return None, Q, N, R, a_hist, r_hist
+            learning_rate = 1 / N[s, a] if not alpha else alpha
+            Q[s, a] += learning_rate * (r - Q[s, a])
+    return Q
 
 
-def Q_control_ucb(envs, nT, c=2, Q0=0, alpha=0):
-    nS, nA = np.size(envs), spaces.size(envs[0].action_space)
-    policy = np.zeros((nS, nA))
-    Q = np.full((nS, nA), Q0, dtype=float)
-    N = np.zeros((nS, nA), dtype=int)
-    R = np.zeros(nS)
-    a_hist = np.full((nS, nT),   -1, dtype=int)
-    r_hist = np.full((nS, nT), None, dtype=float)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(nT):
-            a = select_argmax(policy[s])
+def Q_control_ucb(env, num_steps, alpha=0, c=2, Q0=0):
+    Q = np.full((env.nS, env.nA), Q0, dtype=float)
+    N = np.zeros((env.nS, env.nA), dtype=int)
+    for s in tqdm(range(env.nS)):
+        env.explore(s)
+        for t in range(num_steps):
+            a = select_greedy_equal(upper_confidence_bound(Q[s], N[s], t + 1, c))
             _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
             N[s, a] += 1
-            step_size = 1 / N[s, a] if not alpha else alpha
-            Q[s, a] += step_size * (r - Q[s, a])
-            R[s] += (r - R[s]) / (t + 1)
-            policy[s] = upper_confidence_bound(Q[s], N[s], t + 1, c)
-    return policy, Q, N, R, a_hist, r_hist
+            learning_rate = 1 / N[s, a] if not alpha else alpha
+            Q[s, a] += learning_rate * (r - Q[s, a])
+    return Q
 
 
-def Q_control_grad(envs, nT, alpha=0.1, Q0=0, tau=1, baseline=True):
-    nS, nA = np.size(envs), spaces.size(envs[0].action_space)
-    policy = np.full((nS, nA), 1 / nA)
-    Q = np.full((nS, nA), Q0, dtype=float)
-    N = np.zeros((nS, nA), dtype=int)
-    R = np.zeros(nS)
-    a_hist = np.full((nS, nT),   -1, dtype=int)
-    r_hist = np.full((nS, nT), None, dtype=float)
-    id = np.identity(nA)
-    for s, env in enumerate(tqdm(envs)):
-        for t in range(nT):
-            a = select_sample(policy[s])
+def Q_control_grad(env, num_steps, alpha=0.1, baseline=True, tau=1, Q0=0):
+    policy = np.full((env.nS, env.nA), 1 / env.nA)
+    Q = np.full((env.nS, env.nA), Q0, dtype=float)
+    R = np.zeros(env.nS)
+    id = np.identity(env.nA)
+    for s in tqdm(range(env.nS)):
+        env.explore(s)
+        for t in range(num_steps):
+            a = select_random_choice(policy[s])
             _, r, _, _ = env.step(a)
-            a_hist[s, t] = a
-            r_hist[s, t] = r
-            N[s, a] += 1
             Q[s] += alpha * (r - R[s] * baseline) * (id[a] - policy[s])
             R[s] += (r - R[s]) / (t + 1)
             policy[s] = softmax(Q[s] / tau)
-    return policy, Q, N, R, a_hist, r_hist
+    return Q
 
 
 ################################################################################

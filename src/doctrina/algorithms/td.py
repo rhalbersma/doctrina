@@ -6,7 +6,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from .bandit import select_epsilon_greedy
+from .bandit import select_epsilon_greedy, epsilon_greedy
 from .mc import dispatch_policy_select
 
 
@@ -58,6 +58,22 @@ def Q_learning(env, num_episodes, alpha=0.5, epsilon=0.1, gamma=1., Q0=None):
             a = select_epsilon_greedy(Q[s], epsilon)
             next, r, done, _ = env.step(a)
             Q[s, a] += alpha * (r + gamma * Q[next].max(axis=-1) - Q[s, a])
+            if done:
+                break
+            s = next
+    return Q[:-1]
+
+
+def expected_sarsa(env, num_episodes, alpha=0.5, epsilon=0.1, gamma=1., Q0=None):
+    Q = np.zeros((env.nS + 1, env.nA)) if Q0 is None else Q0.copy()
+    policy = np.full((env.nS + 1, env.nA), 1 / env.nA)
+    for _ in tqdm(range(num_episodes)):
+        s = env.reset()
+        while True:
+            a = select_epsilon_greedy(Q[s], epsilon)
+            next, r, done, _ = env.step(a)
+            Q[s, a] += alpha * (r + gamma * np.sum(policy[next] * Q[next], axis=-1) - Q[s, a])
+            policy[s] = epsilon_greedy(Q[s], epsilon)
             if done:
                 break
             s = next
